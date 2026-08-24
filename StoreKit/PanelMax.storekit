@@ -1,0 +1,93 @@
+{
+  "identifier" : "PanelMaxLocal",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "49.99",
+      "familyShareable" : true,
+      "internalID" : "PM-LIFETIME-001",
+      "localizations" : [
+        {
+          "description" : "Colección, importaciones y series seguidas sin límites, con un solo pago.",
+          "displayName" : "Para siempre",
+          "locale" : "es_ES"
+        }
+      ],
+      "productID" : "com.raulgallego.panelmax.premium.lifetime",
+      "referenceName" : "PanelMax Plus Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "PanelMax",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "es_ES",
+    "_storefront" : "ESP",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "PM-GROUP-001",
+      "localizations" : [],
+      "name" : "PanelMaxPremium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "19.99",
+          "familyShareable" : true,
+          "groupNumber" : 1,
+          "internalID" : "PM-YEARLY-001",
+          "introductoryOffer" : {
+            "internalID" : "PM-TRIAL-001",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "Colección, importaciones y series seguidas sin límites.",
+              "displayName" : "Anual",
+              "locale" : "es_ES"
+            }
+          ],
+          "productID" : "com.raulgallego.panelmax.premium.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "PanelMax Plus Anual",
+          "subscriptionGroupID" : "PM-GROUP-001",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "2.99",
+          "familyShareable" : true,
+          "groupNumber" : 2,
+          "internalID" : "PM-MONTHLY-001",
+          "introductoryOffer" : {
+            "internalID" : "PM-TRIAL-002",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "Colección, importaciones y series seguidas sin límites.",
+              "displayName" : "Mensual",
+              "locale" : "es_ES"
+            }
+          ],
+          "productID" : "com.raulgallego.panelmax.premium.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "PanelMax Plus Mensual",
+          "subscriptionGroupID" : "PM-GROUP-001",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
