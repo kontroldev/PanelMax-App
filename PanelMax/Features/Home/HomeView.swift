@@ -185,7 +185,9 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Theme.placeholder, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .panelGlass(cornerRadius: 14,
+                    tint: Theme.accent.opacity(0.35),
+                    fallbackFill: Theme.placeholder)
         .accessibilityElement(children: .combine)
     }
 

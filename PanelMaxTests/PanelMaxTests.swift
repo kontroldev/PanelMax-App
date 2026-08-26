@@ -195,7 +195,7 @@ struct MetronCatalogTests {
 
     @Test("Rechaza enlaces de paginación hacia otro servidor")
     func rejectsForeignPaginationURL() async throws {
-        try await withStubbedSource(handler: { request in
+        await withStubbedSource(handler: { request in
             StubURLProtocol.response(
                 for: request,
                 json: #"{"count":2,"next":"https://attacker.example/steal","results":[{"id":1,"series":"Serie"}]}"#
@@ -214,7 +214,7 @@ struct MetronCatalogTests {
 
     @Test("Distingue un fallo de autenticación")
     func mapsUnauthorizedResponse() async throws {
-        try await withStubbedSource(handler: { request in
+        await withStubbedSource(handler: { request in
             StubURLProtocol.response(for: request, statusCode: 401, json: "{}")
         }) { source in
             do {

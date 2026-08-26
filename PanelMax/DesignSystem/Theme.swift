@@ -22,6 +22,8 @@ enum Theme {
     static let hairline = Color(.separator)
     static let groupedBackground = Color(.systemGroupedBackground)
 
+    static let cardRadius: CGFloat = 12
+
     // MARK: - Tipografía
 
     /// Título de sección del Home: pequeño, en mayúsculas y muy espaciado.
@@ -44,10 +46,42 @@ struct PremiumBadge: View {
             .tracking(0.5)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(Theme.premiumSoft, in: RoundedRectangle(cornerRadius: 4))
             .foregroundStyle(Theme.premium)
-            .overlay {
-                RoundedRectangle(cornerRadius: 4).strokeBorder(Theme.premium, lineWidth: 0.5)
+            .panelGlass(cornerRadius: 4,
+                        tint: Theme.premium,
+                        fallbackFill: Theme.premiumSoft,
+                        strokeColor: Theme.premium,
+                        strokeWidth: 0.5)
+    }
+}
+
+extension View {
+    /// Superficie Liquid Glass de la app, con fallback para versiones anteriores.
+    @ViewBuilder
+    func panelGlass(cornerRadius: CGFloat = Theme.cardRadius,
+                    tint: Color? = nil,
+                    isInteractive: Bool = false,
+                    fallbackFill: Color = Color(.secondarySystemGroupedBackground),
+                    strokeColor: Color = Theme.hairline,
+                    strokeWidth: CGFloat = 1) -> some View {
+        if #available(iOS 26.0, *) {
+            if let tint {
+                let glass = isInteractive
+                    ? Glass.regular.tint(tint).interactive()
+                    : Glass.regular.tint(tint)
+                glassEffect(glass, in: .rect(cornerRadius: cornerRadius))
+            } else {
+                let glass = isInteractive
+                    ? Glass.regular.interactive()
+                    : Glass.regular
+                glassEffect(glass, in: .rect(cornerRadius: cornerRadius))
             }
+        } else {
+            background(fallbackFill, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(strokeColor, lineWidth: strokeWidth)
+                }
+        }
     }
 }

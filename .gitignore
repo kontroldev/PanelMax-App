@@ -1,0 +1,14 @@
+.DS_Store
+
+# Estado local de Xcode
+xcuserdata/
+*.xcuserstate
+
+# Productos de compilación
+DerivedData/
+build/
+
+# Credenciales y configuración local
+.env
+.env.*
+*.xcconfig.local

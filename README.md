@@ -8,14 +8,18 @@ Aplicación iOS para organizar una colección de cómics y leer archivos CBZ y P
 ![iOS](https://img.shields.io/badge/iOS-18%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![SwiftUI](https://img.shields.io/badge/UI-SwiftUI-green)
+![Versión](https://img.shields.io/badge/versi%C3%B3n-1.1.0-red)
 
-## Funciones actuales
+## Funciones actuales · versión 1.1.0
 
 - Buscar series y consultar todos sus números mediante una fuente de catálogo intercambiable.
 - Guardar números, seguir series, ver sus próximos lanzamientos y detectar huecos dentro de una colección local.
 - Importar, listar, abrir, vincular y eliminar archivos propios.
 - Leer PDF y CBZ con progreso, caché, reducción de imágenes grandes, zoom
   persistente por pellizco o doble toque, y arrastre dentro de la página.
+- Disfrutar de superficies Liquid Glass en iOS 26 en Inicio, la ficha de serie,
+  el lector y el muro de pago, con una apariencia equivalente y compatible en
+  iOS 18–25.
 - Aplicar límites gratuitos desde una única capa de reglas.
 - Probar compras con StoreKit 2 y la configuración local incluida.
 
@@ -146,6 +150,33 @@ configuración del catálogo distinta de la de Debug. Las pruebas de red usan
 `URLProtocol`, por lo que no consumen cuota ni necesitan credenciales.
 
 ## Registro de cambios
+
+### 1.1.0 — 26 de agosto de 2026
+
+Actualización visual compatible con iOS 18 y adaptada al nuevo lenguaje de
+diseño de iOS 26. No cambia el modelo de datos ni requiere migrar la colección.
+
+**Añadido**
+
+- Componente reutilizable `panelGlass` que aplica Liquid Glass nativo en iOS 26
+  y conserva un fallback opaco con borde en iOS 18–25.
+- Superficies de cristal en la tarjeta principal de Inicio, los controles del
+  lector, los números de la ficha de serie, los planes y el botón de compra.
+- Interactividad de cristal en los controles que responden al toque.
+
+**Cambiado**
+
+- Radio de tarjeta centralizado en el sistema de diseño para mantener una
+  geometría coherente entre pantallas.
+- Pequeñas correcciones de Swift 6 en el arranque y en dos pruebas asíncronas,
+  eliminando resultados ignorados y `try` innecesarios.
+
+**Corregido**
+
+- La configuración StoreKit del esquema vuelve a usar una ruta relativa
+  portable, válida al clonar el repositorio en cualquier carpeta.
+- El estado personal de Xcode (`xcuserdata`) queda excluido del control de
+  versiones.
 
 ### 1.0.1 — 22 de agosto de 2026
 

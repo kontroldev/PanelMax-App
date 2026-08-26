@@ -229,8 +229,12 @@ struct PaywallView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
         }
-        .background(Color.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .foregroundStyle(Color(.systemBackground))
+        .panelGlass(cornerRadius: 12,
+                    tint: Color.primary,
+                    isInteractive: true,
+                    fallbackFill: Color.primary,
+                    strokeColor: .clear)
         .disabled(store.isWorking || selectedProduct == nil)
     }
 
@@ -394,13 +398,12 @@ private struct PlanRow: View {
             }
         }
         .padding(14)
-        .background(isSelected ? Theme.premiumSoft : Color(.secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelected ? Theme.premium : Theme.hairline,
-                              lineWidth: isSelected ? 2 : 1)
-        }
+        .panelGlass(cornerRadius: 12,
+                    tint: isSelected ? Theme.premium : nil,
+                    isInteractive: true,
+                    fallbackFill: isSelected ? Theme.premiumSoft : Color(.secondarySystemGroupedBackground),
+                    strokeColor: isSelected ? Theme.premium : Theme.hairline,
+                    strokeWidth: isSelected ? 2 : 1)
         .overlay(alignment: .topLeading) {
             if isBestValue {
                 Text("MEJOR PRECIO")

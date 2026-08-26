@@ -70,7 +70,7 @@ struct PanelMaxApp: App {
                     // La carpeta de cómics se prepara y se excluye de la copia de
                     // seguridad ANTES de que exista ningún archivo dentro: excluir
                     // después no retira del respaldo lo ya copiado.
-                    try? LocalComicFile.prepareComicsDirectory()
+                    _ = try? LocalComicFile.prepareComicsDirectory()
 
                     // Apple exige atender transacciones pendientes nada más abrir la app.
                     await subscriptions.start()

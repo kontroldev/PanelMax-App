@@ -313,12 +313,12 @@ private struct NumberChip: View {
             .font(.subheadline.weight(.semibold))
             .frame(maxWidth: .infinity)
             .frame(height: 44)
-            .background(background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .foregroundStyle(foreground)
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(state == .none ? Theme.hairline : .clear, lineWidth: 1)
-            }
+            .panelGlass(cornerRadius: 8,
+                        tint: state == nil ? nil : background,
+                        isInteractive: true,
+                        fallbackFill: background,
+                        strokeColor: state == nil ? Theme.hairline : .clear)
             .accessibilityLabel("Número \(number)")
             .accessibilityValue(accessibilityValue)
             .accessibilityHint("Mantén pulsado para cambiar el estado o el formato.")

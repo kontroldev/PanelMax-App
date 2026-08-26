@@ -98,6 +98,12 @@ struct ReaderView: View {
                     .font(.footnote)
             }
             .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .panelGlass(cornerRadius: 18,
+                        tint: .white.opacity(0.18),
+                        fallbackFill: .black.opacity(0.55),
+                        strokeColor: .white.opacity(0.18))
+            .padding(.horizontal, 12)
             .padding(.top, 8)
 
             Spacer()
@@ -112,6 +118,13 @@ struct ReaderView: View {
                         .foregroundStyle(fillsWidth ? Theme.premium : .white)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .panelGlass(cornerRadius: 18,
+                        tint: .white.opacity(0.18),
+                        isInteractive: true,
+                        fallbackFill: .black.opacity(0.55),
+                        strokeColor: .white.opacity(0.18))
             .padding(.bottom, 14)
         }
         .foregroundStyle(.white)
