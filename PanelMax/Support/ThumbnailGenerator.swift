@@ -8,8 +8,8 @@ import UIKit
 /// rejilla necesita pintar una miniatura.
 enum ThumbnailGenerator {
 
-    private static let maxDimension: CGFloat = 640
-    private static let compressionQuality: CGFloat = 0.7
+    nonisolated private static let maxDimension: CGFloat = 640
+    nonisolated private static let compressionQuality: CGFloat = 0.7
 
     /// Abre el archivo ya copiado, extrae su primera página y la reduce a un
     /// tamaño de miniatura. Nunca lanza: una portada que falla no debe impedir

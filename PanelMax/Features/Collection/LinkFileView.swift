@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Elegir qué archivo importado (sin vincular todavía) corresponde a un número.
 ///
