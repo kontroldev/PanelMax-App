@@ -20,6 +20,9 @@ remoto, sin cuenta y sin compras.
 - Leer con progreso, caché, reducción de imágenes grandes, zoom persistente
   por pellizco o doble toque, arrastre dentro de la página, y un deslizador
   para saltar directamente a una página.
+- En iPad, lectura en doble página cuando el ancho disponible lo permite
+  (respeta Split View y Stage Manager), con la portada siempre sola y la
+  posición de lectura conservada al rotar el dispositivo.
 - Portada automática por cómic, generada desde su propia primera página: no
   hace falta catálogo remoto para tener miniaturas.
 - Un cómic de bienvenida incluido, para que la biblioteca no empiece vacía.
@@ -86,7 +89,7 @@ del usuario.
 ## Requisitos y ejecución
 
 - Xcode 26.6 o posterior (toolchain de Swift 6.4).
-- iOS 18 o posterior. Solo iPhone en esta versión.
+- iOS 18 o posterior. iPhone y iPad.
 
 El proyecto compila en **modo de lenguaje Swift 6**: la concurrencia estricta
 se comprueba en tiempo de compilación, no como avisos.
@@ -128,8 +131,6 @@ de esa build conserva su colección.
 - Suscripción PanelMax+, muro de pago y límites del plan gratuito. El código
   se conserva aparte, en `Parked/`, para retomarlo cuando haya un catálogo
   real que justifique un cobro recurrente ante Guideline 3.1.2 de Apple.
-- Soporte de iPad: solo iPhone hasta que haya trabajo real de layout para
-  pantallas grandes.
 
 **Añadido**
 
@@ -137,6 +138,10 @@ de esa build conserva su colección.
 - Portada automática por cómic, generada desde su propia página 1.
 - Pestaña propia de Biblioteca, con importar y buscar.
 - Deslizador para saltar de página en el lector.
+- Lector en doble página para iPad (`SpreadLayout`): portada sola, el resto
+  emparejado a partir del segundo número, decidido por el ancho real de la
+  ventana para respetar Split View y Stage Manager. La posición de lectura
+  se conserva al rotar el dispositivo.
 - Exportar la colección a un archivo.
 - Un cómic de bienvenida incluido en el primer arranque.
 - Flujo para vincular un archivo importado a un número catalogado.
@@ -147,6 +152,12 @@ de esa build conserva su colección.
 - El badge de CI apuntaba a un flujo de GitHub Actions inexistente.
 - La app declaraba región de desarrollo en inglés con toda la interfaz en
   español.
+- El ancho de rasterizado de los PDF estaba fijado al ancho de un iPhone;
+  en iPad las páginas se veían borrosas por el reescalado. Ahora se calcula
+  a partir de la pantalla real (`PDFArchive.preferredRenderWidth()`).
+- Al mover el código de compras a `Parked/`, quedó una llamada a un
+  coordinador de importación (`ComicImportCoordinator`) sin su definición;
+  se restauró en `ImportedLibraryView.swift`.
 
 ### 1.1.0 — 26 de agosto de 2026 (desarrollo, no publicada)
 
@@ -157,6 +168,8 @@ versiones para quien retome ese trabajo en una versión futura.
 ## Antes de App Store
 
 - [ ] Sustituir las capturas por otras de la versión 1.0 (sin catálogo).
+- [ ] Capturas de iPad de 13" para App Store Connect: obligatorias en cuanto
+  el dispositivo está activado, no opcionales.
 - [ ] Comprobar desde un dispositivo real los tres enlaces legales de Perfil.
 - [ ] Completar pruebas en dispositivo, accesibilidad y localización.
 - [ ] Responder el cuestionario de clasificación por edad en App Store Connect.

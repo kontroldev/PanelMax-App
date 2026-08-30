@@ -18,6 +18,11 @@ struct HomeView: View {
            order: .reverse)
     private var unfinishedFiles: [LocalComicFile]
 
+    /// Ancho de las tarjetas de las tiras horizontales. Escala con el tamaño
+    /// de texto: con Dynamic Type grande, 96 puntos fijos dejaban los títulos
+    /// recortados a media palabra.
+    @ScaledMetric(relativeTo: .caption2) private var cardWidth: CGFloat = 96
+
     var body: some View {
         NavigationStack {
             // Una única pasada sobre la colección para todo el cuerpo.
@@ -84,7 +89,7 @@ struct HomeView: View {
     private func heroBody(kicker: String, title: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(kicker)
-                .font(.system(size: 9, weight: .bold))
+                .font(.caption2.weight(.bold))
                 .tracking(1.4)
                 .foregroundStyle(Theme.accent)
 
@@ -123,7 +128,7 @@ struct HomeView: View {
                                 ReaderView(file: file)
                             } label: {
                                 ReadingCard(file: file)
-                                    .frame(width: 96)
+                                    .frame(width: cardWidth)
                             }
                             .buttonStyle(.plain)
                         }
@@ -150,8 +155,9 @@ struct HomeView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     ZStack(alignment: .topTrailing) {
                                         LocalCoverImage(url: nil)
+                                            .accessibilityHidden(true)
                                         Text("FALTA")
-                                            .font(.system(size: 8, weight: .bold))
+                                            .font(.caption2.weight(.bold))
                                             .padding(.horizontal, 4).padding(.vertical, 2)
                                             .background(Theme.accent, in: RoundedRectangle(cornerRadius: 3))
                                             .foregroundStyle(.white)
@@ -162,10 +168,10 @@ struct HomeView: View {
                                         .lineLimit(1)
                                         .foregroundStyle(.primary)
                                     Text("Nº \(gap.number)")
-                                        .font(.system(size: 9))
+                                        .font(.caption2)
                                         .foregroundStyle(Theme.secondaryText)
                                 }
-                                .frame(width: 96)
+                                .frame(width: cardWidth)
                                 .accessibilityElement(children: .combine)
                             }
                             .buttonStyle(.plain)
@@ -244,7 +250,7 @@ private struct ReadingCard: View {
                 .lineLimit(1)
 
             Text(file.progressDescription ?? "Sin empezar")
-                .font(.system(size: 9))
+                .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)
         }
         .accessibilityElement(children: .combine)

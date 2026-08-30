@@ -23,7 +23,15 @@ struct SeriesDetailView: View {
     @State private var errorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
-    private let columns = [GridItem(.adaptive(minimum: 64), spacing: 10)]
+    /// El ancho mínimo de cada cuadrito escala con el tamaño de texto: con
+    /// Dynamic Type grande, un mínimo fijo de 64 puntos dejaría los números
+    /// recortados. El máximo evita además que en un iPad de 13" salgan veinte
+    /// columnas de cuadritos diminutos.
+    @ScaledMetric(relativeTo: .subheadline) private var chipMinimumWidth: CGFloat = 64
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: chipMinimumWidth, maximum: 110), spacing: 10)]
+    }
 
     private var sortedIssues: [Issue] {
         ComicNumber.sorted(series.issues ?? [], by: \.number)
@@ -272,11 +280,12 @@ private struct NumberChip: View {
             Text(issue.number)
                 .font(.subheadline.weight(.semibold))
             if issue.isReadable {
-                Image(systemName: "book.fill").font(.system(size: 9))
+                Image(systemName: "book.fill").font(.caption2)
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 44)
+        .frame(minHeight: 44)
+        .padding(.vertical, 4)
         .foregroundStyle(foreground)
         .panelGlass(cornerRadius: 8,
                     tint: state == nil ? nil : background,

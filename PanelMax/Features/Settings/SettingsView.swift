@@ -55,11 +55,16 @@ struct SettingsView: View {
             } label: {
                 Label("Preparar exportación", systemImage: "square.and.arrow.up")
             }
+            .accessibilityHint("Genera un archivo con tu colección. Después podrás compartirlo o guardarlo.")
 
             if let exportURL {
                 ShareLink(item: exportURL) {
                     Label("Compartir archivo", systemImage: "doc.badge.arrow.up")
                 }
+                // El botón aparece solo después de preparar la exportación.
+                // Sin este aviso, con VoiceOver surge de la nada sin que nada
+                // indique que la acción anterior ha terminado bien.
+                .accessibilityHint("El archivo está listo. Elige dónde guardarlo o con qué app compartirlo.")
             }
         } header: {
             Text("Copia de seguridad")
@@ -84,6 +89,9 @@ struct SettingsView: View {
             Link("Política de privacidad", destination: LegalLinks.privacy)
             Link("Soporte", destination: LegalLinks.support)
         }
+        // Los tres abren el navegador. Anunciarlo evita la sorpresa de salir
+        // de la app sin previo aviso, que con VoiceOver desorienta bastante.
+        .accessibilityHint("Se abre en el navegador")
     }
 
     private var aboutSection: some View {

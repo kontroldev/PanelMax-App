@@ -42,14 +42,20 @@ struct AddIssuesView: View {
                 switch mode {
                 case .range:
                     Section("Del número… al número…") {
-                        TextField("Desde", text: $rangeStartText).keyboardType(.numberPad)
-                        TextField("Hasta", text: $rangeEndText).keyboardType(.numberPad)
+                        TextField("Desde", text: $rangeStartText)
+                            .keyboardType(.numberPad)
+                            .accessibilityLabel("Desde el número")
+                        TextField("Hasta", text: $rangeEndText)
+                            .keyboardType(.numberPad)
+                            .accessibilityLabel("Hasta el número")
                     } footer: {
                         Text("Los números que ya tuvieras en esta serie no se duplican.")
                     }
                 case .single:
                     Section("Número") {
                         TextField("Ej. 1/2, Anual 2024, 12", text: $singleNumber)
+                            .accessibilityLabel("Número")
+                            .accessibilityHint("Admite especiales, como 1/2 o Anual 2024.")
                     } footer: {
                         Text("Sirve para especiales que no encajan en un rango numérico.")
                     }

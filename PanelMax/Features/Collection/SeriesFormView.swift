@@ -46,6 +46,10 @@ struct SeriesFormView: View {
                 Section {
                     TextField("Números publicados en total", text: $totalIssuesText)
                         .keyboardType(.numberPad)
+                        // La explicación de abajo es un pie de sección: VoiceOver
+                        // no la asocia al campo, así que se repite como pista
+                        // para quien navega campo a campo y nunca llega a oírla.
+                        .accessibilityHint("Se usa para calcular el porcentaje de la serie y detectar huecos. Puedes dejarlo en blanco.")
                 } footer: {
                     Text("Se usa para calcular el porcentaje de la serie y detectar huecos. Puedes dejarlo en blanco y añadirlo más tarde editando la serie.")
                 }

@@ -56,6 +56,8 @@ struct CollectionView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .accessibilityLabel("Filtrar por estado")
+                    .accessibilityValue(filter.label)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -104,11 +106,27 @@ struct CollectionView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Theme.secondaryText)
         }
+        // El porcentaje suelto ("72 %") no dice nada fuera de contexto, y el
+        // chevron es decorativo: se agrupa todo en una sola frase.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(serie.displayTitle)
+        .accessibilityValue(seriesAccessibilityValue(serie))
+        .accessibilityHint("Abre la ficha de la serie")
+    }
+
+    private func seriesAccessibilityValue(_ serie: Series) -> String {
+        guard let completion = serie.completion else { return "" }
+        let percent = Int(completion * 100)
+        let missing = serie.missingNumbers.count
+        if missing == 0 { return "Completa, \(percent) por ciento" }
+        return "\(percent) por ciento, te faltan \(missing) números"
     }
 
     private func row(for issue: Issue) -> some View {
         HStack(spacing: 12) {
-            LocalCoverImage(url: issue.file?.thumbnailURL, cornerRadius: 4).frame(width: 38)
+            LocalCoverImage(url: issue.file?.thumbnailURL, cornerRadius: 4)
+                .frame(width: 38)
+                .accessibilityHidden(true) // decorativa: el número ya se anuncia
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(issue.displayName).font(.subheadline)
@@ -125,6 +143,9 @@ struct CollectionView: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)
             }
+            // Se agrupa solo el bloque de texto: el botón de leer queda fuera
+            // a propósito, para que siga siendo un elemento accionable propio.
+            .accessibilityElement(children: .combine)
 
             Spacer()
 

@@ -231,6 +231,7 @@ private struct ImportedComicRow: View {
         HStack(spacing: 12) {
             LocalCoverImage(url: file.thumbnailURL, cornerRadius: 6)
                 .frame(width: 40)
+                .accessibilityHidden(true) // decorativa: el nombre ya se anuncia
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(file.displayName)
@@ -256,7 +257,24 @@ private struct ImportedComicRow: View {
             }
         }
         .padding(.vertical, 3)
-        .accessibilityElement(children: .combine)
+        // Con `.combine` se leían los separadores «·» sueltos y la barra de
+        // progreso como un porcentaje aparte. Con `.ignore` se controla la
+        // frase completa: nombre, y después formato, tamaño y estado.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(file.displayName)
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var accessibilityValue: String {
+        var parts = [format, ByteCountFormatter.string(fromByteCount: file.fileSize, countStyle: .file)]
+        if file.isFinished {
+            parts.append("Terminado")
+        } else if let position = file.progressDescription {
+            parts.append(position)
+        } else {
+            parts.append("Sin empezar")
+        }
+        return parts.joined(separator: ", ")
     }
 
     private var format: String {
@@ -346,6 +364,29 @@ private struct PendingComicDeletion {
                 try? FileManager.default.removeItem(at: recoveryDirectory)
             }
         }
+    }
+}
+
+/// Evita que dos importaciones se ejecuten a la vez.
+///
+/// Sin este guardián, pulsar «Importar» dos veces seguidas — o dos ventanas
+/// de la misma app en Stage Manager en iPad — podría lanzar dos lotes de
+/// copia simultáneos sobre la misma carpeta `Comics/`. `@MainActor` porque
+/// solo se llama desde el hilo principal, al iniciar y terminar la tarea de
+/// importación de la interfaz.
+@MainActor
+private enum ComicImportCoordinator {
+    private static var isImporting = false
+
+    @discardableResult
+    static func begin() -> Bool {
+        guard !isImporting else { return false }
+        isImporting = true
+        return true
+    }
+
+    static func end() {
+        isImporting = false
     }
 }
 

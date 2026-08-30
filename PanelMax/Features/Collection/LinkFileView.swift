@@ -40,6 +40,11 @@ struct LinkFileView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        // Sin esto, VoiceOver lee la portada, el nombre y el
+                        // tamaño como tres elementos sueltos, y no queda claro
+                        // que la fila entera sea el botón.
+                        .accessibilityElement(children: .combine)
+                        .accessibilityHint("Vincula este archivo al número \(issue.number)")
                     }
                 }
             }

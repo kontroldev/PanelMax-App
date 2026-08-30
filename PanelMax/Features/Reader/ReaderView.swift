@@ -154,11 +154,17 @@ struct ReaderView: View {
                           systemImage: "chevron.left")
                         .font(.footnote)
                 }
+                // El texto del botón es el título del cómic, así que sin
+                // etiqueta VoiceOver lo lee como si fuera un rótulo y no se
+                // entiende que sirva para salir del lector.
+                .accessibilityLabel("Cerrar el lector")
+                .accessibilityHint("Guarda tu progreso y vuelve atrás")
 
                 Spacer()
 
                 Text("Pág. \(displayedPage + 1) / \(max(totalPages, 1))")
                     .font(.footnote)
+                    .accessibilityLabel("Página \(displayedPage + 1) de \(max(totalPages, 1))")
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
@@ -188,6 +194,11 @@ struct ReaderView: View {
                 }
                 .disabled(isDouble)
                 .opacity(isDouble ? 0.4 : 1)
+                .accessibilityLabel("Ajuste de la página")
+                .accessibilityValue(fillsWidth ? "Rellenando el ancho" : "Página completa")
+                .accessibilityHint(isDouble
+                                   ? "No disponible en doble página"
+                                   : "Alterna entre ver la página entera o rellenar el ancho")
 
                 // El interruptor solo aparece donde la doble página es
                 // posible. En un iPhone en vertical sería un mando que no
@@ -201,6 +212,8 @@ struct ReaderView: View {
                             .font(.footnote)
                             .foregroundStyle(prefersDoublePage ? Theme.premium : .white)
                     }
+                    .accessibilityLabel("Modo de página")
+                    .accessibilityValue(prefersDoublePage ? "Doble página" : "Página única")
                     .accessibilityHint("Alterna entre ver una página o dos a la vez.")
                 }
             }
@@ -269,8 +282,16 @@ struct ReaderView: View {
                 try? context.save()
             }
 
+            // Se calcula AQUÍ, no dentro de PDFArchive: esta función corre en
+            // el actor principal (herencia del aislamiento por defecto del
+            // proyecto), que es el único sitio desde el que `UIScreen` puede
+            // leerse. `ComicArchiveFactory.open` es `nonisolated` a propósito
+            // para poder llamarse desde el `Task.detached` de abajo, así que
+            // el valor tiene que entrar ya calculado, no calcularse dentro.
+            let pdfTargetWidth = PDFArchive.preferredRenderWidth()
+
             let opened = try await Task.detached(priority: .userInitiated) {
-                try ComicArchiveFactory.open(url: url)
+                try ComicArchiveFactory.open(url: url, pdfTargetWidth: pdfTargetWidth)
             }.value
             guard !Task.isCancelled else { return }
             archive = opened

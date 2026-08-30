@@ -45,15 +45,19 @@ enum ComicArchiveFactory {
     ///
     /// Si el archivo viene de un marcador de seguridad hay que pedir acceso antes
     /// de leerlo; el `defer` lo libera pase lo que pase.
-    static func open(_ file: LocalComicFile) throws -> any ComicArchive {
+    ///
+    /// `pdfTargetWidth` solo importa para PDF (ver `PDFArchive.preferredRenderWidth()`).
+    /// El valor por defecto vale para generar miniaturas en segundo plano, donde no
+    /// hay pantalla que consultar y el resultado se va a reducir de todos modos.
+    static func open(_ file: LocalComicFile, pdfTargetWidth: CGFloat = PDFArchive.defaultRenderWidth) throws -> any ComicArchive {
         let url = try file.resolveURL()
-        return try open(url: url)
+        return try open(url: url, pdfTargetWidth: pdfTargetWidth)
     }
 
     /// Abre una URL y mantiene vivo el acceso de seguridad durante toda la lectura.
     /// PDFKit y ZIPFoundation leen páginas de forma diferida, así que liberar el
     /// permiso justo después del inicializador hace fallar archivos de iCloud.
-    nonisolated static func open(url: URL) throws -> any ComicArchive {
+    nonisolated static func open(url: URL, pdfTargetWidth: CGFloat = PDFArchive.defaultRenderWidth) throws -> any ComicArchive {
         let access = SecurityScopedAccess(url: url)
         let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
         guard values.isRegularFile != false else { throw ComicArchiveError.fileUnavailable }
@@ -67,7 +71,7 @@ enum ComicArchiveFactory {
             return try CBZArchive(url: url, securityAccess: access)
         #endif
         case "pdf":
-            return try PDFArchive(url: url, securityAccess: access)
+            return try PDFArchive(url: url, targetWidth: pdfTargetWidth, securityAccess: access)
         default:
             throw ComicArchiveError.unsupportedFormat
         }
@@ -231,30 +235,44 @@ nonisolated final class PDFArchive: ComicArchive, @unchecked Sendable {
                                             qos: .userInitiated)
     private let cache = NSCache<NSNumber, UIImage>()
 
-    fileprivate nonisolated init(url: URL, securityAccess: SecurityScopedAccess) throws {
+    /// Ancho en píxeles al que se rasteriza cada página. Se calcula en el
+    /// hilo principal (ver `preferredRenderWidth()`) y llega aquí ya como un
+    /// número: `UIScreen` es una API aislada al actor principal, y esta
+    /// clase es `nonisolated` a propósito para poder descomprimir páginas en
+    /// segundo plano, así que el valor no puede leerse desde dentro.
+    private let targetWidth: CGFloat
+
+    fileprivate nonisolated init(url: URL, targetWidth: CGFloat, securityAccess: SecurityScopedAccess) throws {
         guard let document = PDFDocument(url: url) else { throw ComicArchiveError.unsupportedFormat }
         guard document.pageCount > 0 else { throw ComicArchiveError.emptyArchive }
         guard document.pageCount <= 10_000 else { throw ComicArchiveError.tooManyPages }
         self.document = document
         self.numberOfPages = document.pageCount
+        self.targetWidth = targetWidth
         self.securityAccess = securityAccess
         cache.countLimit = 6
     }
 
     nonisolated var pageCount: Int { numberOfPages }
 
-    /// Ancho en píxeles al que se rasteriza cada página del PDF.
+    /// Ancho de rasterizado por defecto para quien abra un PDF sin pasar por
+    /// la pantalla (por ejemplo, generar una miniatura en segundo plano). Es
+    /// el mismo valor que se usaba antes de tener en cuenta la pantalla real.
+    nonisolated static let defaultRenderWidth: CGFloat = 1_290
+
+    /// Ancho de rasterizado ideal para la pantalla actual, con suelo de 1290 px
+    /// (para que un iPhone pequeño no renderice páginas pobres) y techo de
+    /// 2400 px, el mismo límite que usa `ImageDownsampler` para los CBZ.
     ///
-    /// Se calcula una sola vez a partir de la pantalla del dispositivo, con un
-    /// suelo de 1290 px (para que un iPhone pequeño no renderice páginas
-    /// pobres) y un techo de 2400 px, que es el mismo límite que usa
-    /// `ImageDownsampler` para los CBZ: por encima de eso el coste de memoria
-    /// no compensa la mejora visible.
-    nonisolated static let renderWidth: CGFloat = {
+    /// `@MainActor` porque `UIScreen` solo puede leerse desde el hilo
+    /// principal. Hay que llamarla ANTES de abrir el archivo en segundo
+    /// plano (ver `ReaderView.open()`), no desde dentro de `PDFArchive`.
+    @MainActor
+    static func preferredRenderWidth() -> CGFloat {
         let bounds = UIScreen.main.nativeBounds.size
         let nativeWidth = max(bounds.width, bounds.height) // apaisado incluido
         return min(max(nativeWidth, 1_290), 2_400)
-    }()
+    }
 
     nonisolated func page(at index: Int) async -> UIImage? {
         guard index >= 0, index < numberOfPages else { return nil }
@@ -277,14 +295,14 @@ nonisolated final class PDFArchive: ComicArchive, @unchecked Sendable {
                 // Nítido en Retina, pero con ambas dimensiones acotadas para que
                 // una página deliberadamente extrema no reserve cientos de MB.
                 //
-                // El ancho objetivo se deriva de la pantalla real, no de una
-                // constante: estaba fijado en 1290 px (el ancho del iPhone 16
-                // Pro), así que en un iPad de 13" (2064 px de ancho) cada página
-                // se renderizaba pequeña y el sistema la escalaba hacia arriba,
-                // con el resultado de un PDF visiblemente borroso.
-                let targetWidth = PDFArchive.renderWidth
+                // El ancho objetivo ya no se calcula aquí dentro: antes estaba
+                // fijado a 1290 px (el ancho del iPhone 16 Pro), así que en un
+                // iPad de 13" (2064 px de ancho) cada página se renderizaba
+                // pequeña y el sistema la escalaba hacia arriba, con el
+                // resultado de un PDF visiblemente borroso. Ahora llega ya
+                // calculado desde fuera, en `self.targetWidth`.
                 let maximumDimension: CGFloat = 4_096
-                let scale = min(targetWidth / bounds.width,
+                let scale = min(self.targetWidth / bounds.width,
                                 maximumDimension / max(bounds.width, bounds.height))
                 let size = CGSize(width: max(bounds.width * scale, 1),
                                   height: max(bounds.height * scale, 1))
