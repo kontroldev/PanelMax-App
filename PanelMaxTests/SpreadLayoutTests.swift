@@ -2,6 +2,7 @@ import Testing
 @testable import PanelMax
 
 @Suite("Pliegos del lector")
+@MainActor
 struct SpreadLayoutTests {
 
     // MARK: - Página única

@@ -1,4 +1,6 @@
-# PanelMax 📚
+# Viñe 📚
+
+*(nombre de proyecto interno en Xcode: PanelMax — ver nota en Arquitectura)*
 
 Aplicación iOS para catalogar una colección de cómics a mano y leer archivos
 propios en CBZ y PDF. Funciona por completo sin conexión: sin catálogo
@@ -28,6 +30,9 @@ remoto, sin cuenta y sin compras.
 - Un cómic de bienvenida incluido, para que la biblioteca no empiece vacía.
 - Exportar la colección catalogada a un archivo, como única copia de
   seguridad posible sin iCloud ni cuenta.
+- Accesibilidad: tipografías escalables con Dynamic Type, filas y controles
+  descritos para VoiceOver, y elementos decorativos (portadas, chevrons)
+  ocultos al lector de pantalla para no generar ruido.
 - Disfrutar de superficies Liquid Glass en iOS 26 en Inicio, la ficha de
   serie y el lector, con una apariencia equivalente y compatible en iOS 18–25.
 
@@ -58,6 +63,14 @@ códigos ni el uso compartido en familia. Volverán en versiones futuras
 cuando haya un servicio real detrás que los justifique.
 
 ## Arquitectura
+
+> **Sobre el nombre**: la app se presenta a los usuarios como **Viñe**, pero
+> el proyecto de Xcode, la carpeta del repositorio, el esquema, los tipos y
+> los comentarios del código siguen usando `PanelMax`. Es intencional: cambiar
+> el nombre visible no exige renombrar el proyecto entero, y hacerlo habría
+> significado tocar cientos de referencias sin necesidad real. Si en algún
+> momento se decide rebautizar también el proyecto interno, es un cambio
+> aparte, cosmético, que no depende de nada de lo descrito aquí.
 
 | Área | Implementación |
 |---|---|
@@ -145,6 +158,14 @@ de esa build conserva su colección.
 - Exportar la colección a un archivo.
 - Un cómic de bienvenida incluido en el primer arranque.
 - Flujo para vincular un archivo importado a un número catalogado.
+- Pasada de accesibilidad: seis tamaños de fuente fijos sustituidos por
+  estilos escalables, `@ScaledMetric` en anchos de tarjetas y columnas del
+  grid de números, y etiquetas/valores de VoiceOver en filas de colección,
+  biblioteca importada y mandos del lector.
+- Nombre visible de la app cambiado a **Viñe** (`INFOPLIST_KEY_CFBundleDisplayName`)
+  y Bundle Identifier a `com.kontroldesignstudio.vine`. El proyecto de Xcode
+  y sus carpetas conservan el nombre interno `PanelMax`.
+- Icono de app nuevo: estallido blanco con una V roja sobre fondo rojo de marca.
 
 **Corregido**
 
@@ -158,6 +179,14 @@ de esa build conserva su colección.
 - Al mover el código de compras a `Parked/`, quedó una llamada a un
   coordinador de importación (`ComicImportCoordinator`) sin su definición;
   se restauró en `ImportedLibraryView.swift`.
+- Dos propiedades estáticas de `ThumbnailGenerator` (`maxDimension`,
+  `compressionQuality`) se leían desde una función `nonisolated` sin estar
+  marcadas como tales; con el aislamiento de actor por defecto del proyecto
+  (`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`), Swift 6 lo rechaza en
+  compilación. Mismo tipo de fallo que el de `PDFArchive` de más arriba.
+- `INFOPLIST_KEY_CFBundleDisplayName = Viñe;` sin comillas rompía el parseo
+  del `.pbxproj` («project is damaged»): el formato antiguo de Xcode no
+  admite caracteres no ASCII en un valor sin comillas.
 
 ### 1.1.0 — 26 de agosto de 2026 (desarrollo, no publicada)
 
@@ -167,13 +196,18 @@ versiones para quien retome ese trabajo en una versión futura.
 
 ## Antes de App Store
 
+- [x] Accesibilidad: Dynamic Type y VoiceOver en las pantallas principales.
+- [ ] `NavigationSplitView` en Mi colección para iPad — sigue siendo
+  `NavigationStack` + `List`, con filas de ancho completo en pantalla grande.
 - [ ] Sustituir las capturas por otras de la versión 1.0 (sin catálogo).
 - [ ] Capturas de iPad de 13" para App Store Connect: obligatorias en cuanto
   el dispositivo está activado, no opcionales.
 - [ ] Comprobar desde un dispositivo real los tres enlaces legales de Perfil.
-- [ ] Completar pruebas en dispositivo, accesibilidad y localización.
+- [ ] Completar pruebas en dispositivo y localización.
 - [ ] Responder el cuestionario de clasificación por edad en App Store Connect.
 - [ ] Declarar no-trader en la Digital Services Act (sin compras integradas).
+- [ ] Confirmar que el Bundle Identifier (`com.kontroldesignstudio.vine`)
+  encaja con el tipo de cuenta de Apple Developer usada para publicar.
 
 Documentos incluidos: [Privacidad](docs/PRIVACY.md), [Soporte](docs/SUPPORT.md)
 y [Términos](docs/TERMS.md).
