@@ -1,7 +1,11 @@
 import SwiftUI
 import SwiftData
 
-/// Contenedor de pestañas. Cuatro pestañas, como en el boceto.
+/// Contenedor de pestañas.
+///
+/// Biblioteca importada era antes un `NavigationLink` escondido dentro de
+/// Perfil. En una app sin catálogo, importar y leer es la mitad del
+/// producto, así que sube a pestaña propia.
 struct RootView: View {
 
     private let persistenceWarning: String?
@@ -16,7 +20,7 @@ struct RootView: View {
     @AppStorage("selectedTab") private var selection: Tab = .home
 
     enum Tab: String {
-        case home, search, collection, profile
+        case home, collection, library, profile
     }
 
     var body: some View {
@@ -25,13 +29,13 @@ struct RootView: View {
                 .tabItem { Label("Inicio", systemImage: "house.fill") }
                 .tag(Tab.home)
 
-            SearchView()
-                .tabItem { Label("Buscar", systemImage: "magnifyingglass") }
-                .tag(Tab.search)
-
             CollectionView()
                 .tabItem { Label("Mi colección", systemImage: "books.vertical.fill") }
                 .tag(Tab.collection)
+
+            ImportedLibraryView()
+                .tabItem { Label("Biblioteca", systemImage: "square.and.arrow.down.on.square.fill") }
+                .tag(Tab.library)
 
             SettingsView()
                 .tabItem { Label("Perfil", systemImage: "person.crop.circle") }
@@ -48,6 +52,5 @@ struct RootView: View {
 
 #Preview {
     RootView(persistenceWarning: nil)
-        .environment(SubscriptionStore())
         .modelContainer(PreviewData.container)
 }

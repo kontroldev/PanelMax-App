@@ -27,6 +27,10 @@ final class LocalComicFile {
     var importedAt: Date = Date()
     var fileSize: Int64 = 0
 
+    /// Miniatura generada a partir de la página 1 del propio archivo, en
+    /// `Documents/Covers`. Sin catálogo remoto es la única portada posible.
+    var thumbnailFilename: String?
+
     /// Progreso propio del archivo. Es necesario porque un cómic importado puede
     /// leerse sin estar vinculado a ningún número del catálogo.
     var currentPage: Int = 0
@@ -73,9 +77,25 @@ final class LocalComicFile {
         try target.setResourceValues(values)
     }
 
+    /// Carpeta privada de miniaturas. Igual que `Comics/`, excluida de la copia
+    /// de seguridad: son derivados que se pueden regenerar desde el archivo.
+    nonisolated static var coversDirectory: URL {
+        URL.documentsDirectory.appending(path: "Covers", directoryHint: .isDirectory)
+    }
+
+    @discardableResult
+    nonisolated static func prepareCoversDirectory(using manager: FileManager = .default) throws -> URL {
+        let directory = coversDirectory
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try excludeFromBackup(directory)
+        return directory
+    }
+
     /// Construye una URL interna y rechaza nombres manipulados o rutas que escapen
-    /// de `Documents/Comics` (por ejemplo, datos persistentes dañados con `../`).
-    nonisolated static func storageURL(for filename: String) throws -> URL {
+    /// del directorio dado (por ejemplo, datos persistentes dañados con `../`).
+    /// Comparte la validación entre `Comics/` y `Covers/`: el riesgo de un
+    /// nombre de archivo manipulado es el mismo en ambos sitios.
+    nonisolated private static func safeStorageURL(for filename: String, in directory: URL) throws -> URL {
         let leaf = (filename as NSString).lastPathComponent
         guard !filename.isEmpty,
               filename == leaf,
@@ -84,17 +104,33 @@ final class LocalComicFile {
             throw ComicArchiveError.fileUnavailable
         }
 
-        let directory = comicsDirectory.standardizedFileURL.resolvingSymlinksInPath()
-        let candidate = directory
+        let base = directory.standardizedFileURL.resolvingSymlinksInPath()
+        let candidate = base
             .appending(path: filename, directoryHint: .notDirectory)
             .standardizedFileURL
             .resolvingSymlinksInPath()
-        let directoryPrefix = directory.path.hasSuffix("/") ? directory.path : directory.path + "/"
+        let basePrefix = base.path.hasSuffix("/") ? base.path : base.path + "/"
 
-        guard candidate.path.hasPrefix(directoryPrefix) else {
+        guard candidate.path.hasPrefix(basePrefix) else {
             throw ComicArchiveError.fileUnavailable
         }
         return candidate
+    }
+
+    nonisolated static func storageURL(for filename: String) throws -> URL {
+        try safeStorageURL(for: filename, in: comicsDirectory)
+    }
+
+    nonisolated static func coverStorageURL(for filename: String) throws -> URL {
+        try safeStorageURL(for: filename, in: coversDirectory)
+    }
+
+    /// URL de la miniatura, si existe y su nombre sigue siendo válido.
+    /// Nunca lanza: una portada es una mejora visual, no algo que deba
+    /// interrumpir el resto de la pantalla si falla.
+    var thumbnailURL: URL? {
+        guard let thumbnailFilename else { return nil }
+        return try? Self.coverStorageURL(for: thumbnailFilename)
     }
 
     /// Devuelve la copia privada, si el registro usa una. No apunta nunca al

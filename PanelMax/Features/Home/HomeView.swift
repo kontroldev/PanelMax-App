@@ -3,35 +3,25 @@ import SwiftData
 
 /// Pantalla de inicio.
 ///
-/// Las series seguidas y sus próximos números aparecen antes de la colección.
-/// Así «seguir» tiene una utilidad visible incluso cuando todavía no se posee
-/// ningún número de esa serie.
-///
 /// Nota de rendimiento: las secciones se calculan en memoria sobre las series
 /// guardadas, no con predicados de SwiftData. Todo el trabajo se hace UNA vez
-/// por evaluación del cuerpo, en `HomeSnapshot`. La versión anterior recorría
-/// la colección entera cinco o seis veces por render, porque cada propiedad
-/// calculada (`collectionSeries`, `missingHighlights`, `inProgress`…) se volvía
-/// a evaluar en cada sitio donde se usaba.
+/// por evaluación del cuerpo, en `HomeSnapshot`.
 struct HomeView: View {
 
     @Query(sort: \Series.dateAdded, order: .reverse) private var series: [Series]
 
     /// Lecturas empezadas y sin terminar. Se consulta sobre `LocalComicFile`
     /// porque solo se puede leer aquello de lo que hay archivo: así el archivo
-    /// importado suelto aparece igual que el vinculado a un número del catálogo.
+    /// importado suelto aparece igual que el vinculado a un número catalogado.
     @Query(filter: #Predicate<LocalComicFile> { $0.lastReadAt != nil && !$0.isFinished },
            sort: \LocalComicFile.lastReadAt,
            order: .reverse)
     private var unfinishedFiles: [LocalComicFile]
 
-    @Environment(SubscriptionStore.self) private var store
-    @Environment(\.catalog) private var catalog
-
-    @State private var paywall: PaywallReason?
-    @State private var upcomingIssues: [IssueSummary] = []
-    @State private var isLoadingUpcoming = false
-    @State private var upcomingError: String?
+    /// Ancho de las tarjetas de las tiras horizontales. Escala con el tamaño
+    /// de texto: con Dynamic Type grande, 96 puntos fijos dejaban los títulos
+    /// recortados a media palabra.
+    @ScaledMetric(relativeTo: .caption2) private var cardWidth: CGFloat = 96
 
     var body: some View {
         NavigationStack {
@@ -43,8 +33,6 @@ struct HomeView: View {
                     if snapshot.isEmpty && unfinishedFiles.isEmpty {
                         emptyState
                     } else {
-                        followedSeriesSection(snapshot)
-                        upcomingSection(snapshot)
                         continueReading
 
                         if !snapshot.collectionSeries.isEmpty {
@@ -57,17 +45,6 @@ struct HomeView: View {
                 .padding(.bottom, 24)
             }
             .navigationTitle("PanelMax")
-            .toolbar {
-                if !store.isPremium {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { paywall = .general } label: { PremiumBadge(text: "PANELMAX+") }
-                    }
-                }
-            }
-            .paywall($paywall)
-            .task(id: snapshot.followedCatalogIDs) {
-                await loadUpcoming(for: snapshot.followedCatalogIDs)
-            }
         }
     }
 
@@ -78,100 +55,41 @@ struct HomeView: View {
         ContentUnavailableView {
             Label("Tu estantería está vacía", systemImage: "books.vertical")
         } description: {
-            Text("Busca una serie y añade el primer número. También puedes importar un CBZ que ya tengas.")
+            Text("Crea tu primera serie desde Mi colección, o importa un cómic desde Biblioteca para empezar a leer.")
         }
         .padding(.top, 60)
     }
 
-    // MARK: - Series seguidas
-
-    @ViewBuilder
-    private func followedSeriesSection(_ snapshot: HomeSnapshot) -> some View {
-        if !snapshot.followedSeries.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Theme.sectionLabel("Series que sigues")
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(snapshot.followedSeries) { item in
-                            NavigationLink {
-                                SeriesDetailView(summary: item.catalogSummary)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    CoverImage(url: item.coverURL)
-                                    Text(item.title)
-                                        .font(.caption2.weight(.semibold))
-                                        .lineLimit(2)
-                                }
-                                .frame(width: 88)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint("Abre la serie")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func upcomingSection(_ snapshot: HomeSnapshot) -> some View {
-        if !snapshot.followedSeries.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Theme.sectionLabel("Próximamente")
-
-                if isLoadingUpcoming {
-                    ProgressView("Buscando próximos números…")
-                        .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8)
-                } else if let upcomingError {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(upcomingError)
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondaryText)
-                        Button("Volver a intentar") {
-                            Task { await loadUpcoming(for: snapshot.followedCatalogIDs) }
-                        }
-                        .font(.caption.weight(.semibold))
-                    }
-                } else if upcomingIssues.isEmpty {
-                    Text("No hay próximos números anunciados para las series que sigues.")
-                        .font(.caption)
-                        .foregroundStyle(Theme.secondaryText)
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 10) {
-                            ForEach(upcomingIssues) { issue in
-                                UpcomingIssueCard(issue: issue)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: - Destacado
 
-    /// El primer hueco de una serie seguida. Si no hay huecos, la serie más reciente.
+    /// El primer hueco de una serie con huecos. Si no hay huecos, la serie más reciente.
     @ViewBuilder
     private func heroCard(_ snapshot: HomeSnapshot) -> some View {
         if let highlight = snapshot.missingHighlights.first {
-            heroBody(kicker: "TE FALTA EN LA COLECCIÓN",
-                     title: highlight.series.title,
-                     detail: "Nº \(highlight.number) · \(highlight.series.publisher)")
+            NavigationLink {
+                SeriesDetailView(series: highlight.series)
+            } label: {
+                heroBody(kicker: "TE FALTA EN LA COLECCIÓN",
+                        title: highlight.series.title,
+                        detail: "Nº \(highlight.number) · \(highlight.series.publisher)")
+            }
+            .buttonStyle(.plain)
         } else if let recent = snapshot.collectionSeries.first {
-            heroBody(kicker: "EN TU COLECCIÓN",
-                     title: recent.title,
-                     detail: "\(recent.allOwnedIssues.count) números · \(recent.publisher)")
+            NavigationLink {
+                SeriesDetailView(series: recent)
+            } label: {
+                heroBody(kicker: "EN TU COLECCIÓN",
+                        title: recent.title,
+                        detail: "\(recent.allOwnedIssues.count) números · \(recent.publisher)")
+            }
+            .buttonStyle(.plain)
         }
     }
 
     private func heroBody(kicker: String, title: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(kicker)
-                .font(.system(size: 9, weight: .bold))
+                .font(.caption2.weight(.bold))
                 .tracking(1.4)
                 .foregroundStyle(Theme.accent)
 
@@ -193,10 +111,10 @@ struct HomeView: View {
 
     // MARK: - Continuar leyendo
 
-    /// Una única sección para toda lectura en curso, venga de un número del
-    /// catálogo o de un archivo importado sin vincular. Antes se leía de
-    /// `Issue.progress`, así que un CBZ suelto que estabas leyendo no aparecía
-    /// nunca aunque el lector sí guardaba su posición.
+    /// Una única sección para toda lectura en curso, venga de un número
+    /// catalogado o de un archivo importado sin vincular. Antes se leía de
+    /// `Issue.progress`, así que un CBZ suelto que estabas leyendo no
+    /// aparecía nunca aunque el lector sí guardaba su posición.
     @ViewBuilder
     private var continueReading: some View {
         if !unfinishedFiles.isEmpty {
@@ -210,7 +128,7 @@ struct HomeView: View {
                                 ReaderView(file: file)
                             } label: {
                                 ReadingCard(file: file)
-                                    .frame(width: 96)
+                                    .frame(width: cardWidth)
                             }
                             .buttonStyle(.plain)
                         }
@@ -231,58 +149,37 @@ struct HomeView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 10) {
                         ForEach(snapshot.missingHighlights) { gap in
-                            VStack(alignment: .leading, spacing: 4) {
-                                ZStack(alignment: .topTrailing) {
-                                    CoverImage(url: gap.series.coverURL)
-                                    Text("FALTA")
-                                        .font(.system(size: 8, weight: .bold))
-                                        .padding(.horizontal, 4).padding(.vertical, 2)
-                                        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 3))
-                                        .foregroundStyle(.white)
-                                        .padding(4)
+                            NavigationLink {
+                                SeriesDetailView(series: gap.series)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ZStack(alignment: .topTrailing) {
+                                        LocalCoverImage(url: nil)
+                                            .accessibilityHidden(true)
+                                        Text("FALTA")
+                                            .font(.caption2.weight(.bold))
+                                            .padding(.horizontal, 4).padding(.vertical, 2)
+                                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 3))
+                                            .foregroundStyle(.white)
+                                            .padding(4)
+                                    }
+                                    Text(gap.series.title)
+                                        .font(.caption2.weight(.semibold))
+                                        .lineLimit(1)
+                                        .foregroundStyle(.primary)
+                                    Text("Nº \(gap.number)")
+                                        .font(.caption2)
+                                        .foregroundStyle(Theme.secondaryText)
                                 }
-                                Text(gap.series.title)
-                                    .font(.caption2.weight(.semibold))
-                                    .lineLimit(1)
-                                Text("Nº \(gap.number)")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(Theme.secondaryText)
+                                .frame(width: cardWidth)
+                                .accessibilityElement(children: .combine)
                             }
-                            .frame(width: 96)
-                            .accessibilityElement(children: .combine)
+                            .buttonStyle(.plain)
                         }
                     }
                 }
             }
         }
-    }
-
-    // MARK: - Novedades
-
-    private func loadUpcoming(for seriesIDs: [String]) async {
-        guard !seriesIDs.isEmpty else {
-            upcomingIssues = []
-            upcomingError = nil
-            isLoadingUpcoming = false
-            return
-        }
-
-        isLoadingUpcoming = true
-        upcomingError = nil
-
-        do {
-            let loaded = try await catalog.upcoming(seriesIDs: seriesIDs)
-            guard !Task.isCancelled else { return }
-            upcomingIssues = loaded
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled else { return }
-            upcomingIssues = []
-            upcomingError = (error as? CatalogError)?.errorDescription ?? error.localizedDescription
-        }
-
-        isLoadingUpcoming = false
     }
 }
 
@@ -292,85 +189,49 @@ struct HomeView: View {
 private struct HomeSnapshot {
 
     let collectionSeries: [Series]
-    let followedSeries: [Series]
-    let followedCatalogIDs: [String]
     let missingHighlights: [Gap]
 
-    var isEmpty: Bool { collectionSeries.isEmpty && followedSeries.isEmpty }
+    var isEmpty: Bool { collectionSeries.isEmpty }
 
     init(series: [Series]) {
         var collection: [Series] = []
-        var followed: [Series] = []
         var gaps: [Gap] = []
 
         for serie in series {
-            // Una serie seguida pero sin números no convierte Inicio en una
-            // pantalla aparentemente rota ni hace desaparecer el estado vacío.
-            if !serie.allOwnedIssues.isEmpty {
-                collection.append(serie)
+            guard !serie.allOwnedIssues.isEmpty else { continue }
+            collection.append(serie)
 
-                // Un hueco por serie como máximo: si enseñas los doce que le
-                // faltan a alguien, deja de ser una ayuda y es un reproche.
-                if let first = serie.missingNumbers.first {
-                    gaps.append(Gap(series: serie, number: first))
-                }
-            }
-            if serie.isFollowed {
-                followed.append(serie)
+            // Un hueco por serie como máximo: si enseñas los doce que le
+            // faltan a alguien, deja de ser una ayuda y es un reproche.
+            if let first = serie.missingNumbers.first {
+                gaps.append(Gap(series: serie, number: first))
             }
         }
 
-        followed.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-
         self.collectionSeries = collection
-        self.followedSeries = followed
-        self.followedCatalogIDs = followed.map(\.catalogID).filter { !$0.isEmpty }
         self.missingHighlights = gaps
     }
 
     struct Gap: Identifiable {
         let series: Series
         let number: Int
-        /// `persistentModelID` en lugar de `catalogID`: dos series sin id de
-        /// catálogo producían la misma clave y SwiftUI reciclaba mal las celdas.
+        /// `persistentModelID` en lugar de `catalogID`: dos series sin id
+        /// propio producían la misma clave y SwiftUI reciclaba mal las celdas.
         var id: String { "\(series.persistentModelID.hashValue)-\(number)" }
     }
 }
 
 // MARK: - Tarjetas
 
-private struct UpcomingIssueCard: View {
-    let issue: IssueSummary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            CoverImage(url: issue.coverURL)
-            Text(issue.seriesTitle.isEmpty ? "Serie seguida" : issue.seriesTitle)
-                .font(.caption2.weight(.semibold))
-                .lineLimit(1)
-            Text("Nº \(issue.number)")
-                .font(.system(size: 9))
-                .foregroundStyle(Theme.secondaryText)
-            if let date = issue.coverDate {
-                Text(date, format: .dateTime.day().month(.abbreviated))
-                    .font(.system(size: 9))
-                    .foregroundStyle(Theme.secondaryText)
-            }
-        }
-        .frame(width: 88)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// Lectura en curso. Usa la portada del número si el archivo está vinculado
-/// al catálogo y, si no, el marcador de posición con el nombre del archivo.
+/// Lectura en curso. La portada sale del propio archivo importado, esté o no
+/// vinculado a un número catalogado.
 private struct ReadingCard: View {
     let file: LocalComicFile
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .bottom) {
-                CoverImage(url: file.issue?.coverURL)
+                LocalCoverImage(url: file.thumbnailURL)
 
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
@@ -389,7 +250,7 @@ private struct ReadingCard: View {
                 .lineLimit(1)
 
             Text(file.progressDescription ?? "Sin empezar")
-                .font(.system(size: 9))
+                .font(.caption2)
                 .foregroundStyle(Theme.secondaryText)
         }
         .accessibilityElement(children: .combine)
@@ -398,20 +259,7 @@ private struct ReadingCard: View {
     }
 }
 
-private extension Series {
-    var catalogSummary: SeriesSummary {
-        SeriesSummary(id: catalogID,
-                      title: title,
-                      publisher: publisher,
-                      startYear: startYear,
-                      summary: summary,
-                      coverURL: coverURL,
-                      issueCount: totalIssues)
-    }
-}
-
 #Preview {
     HomeView()
-        .environment(SubscriptionStore())
         .modelContainer(PreviewData.container)
 }

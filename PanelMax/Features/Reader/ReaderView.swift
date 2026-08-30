@@ -22,7 +22,57 @@ struct ReaderView: View {
     @State private var openingError: String?
     @State private var progressError: String?
 
+    /// Preferencia del usuario para la doble página. Se recuerda entre cómics
+    /// porque es una decisión de cómo te gusta leer, no de qué estás leyendo.
+    @AppStorage("readerPrefersDoublePage") private var prefersDoublePage = true
+
+    /// Estado del deslizador de páginas. Separado de `currentPage` a
+    /// propósito: `currentPage` mueve el `TabView` (y por tanto descomprime
+    /// páginas) en cada cambio, así que solo se actualiza al soltar el dedo,
+    /// no en cada punto intermedio del arrastre.
+    @State private var isScrubbing = false
+    @State private var scrubPage: Double = 0
+
     private var totalPages: Int { archive?.pageCount ?? 0 }
+
+    /// Página mostrada en la cabecera: la del arrastre en curso si se está
+    /// arrastrando, o la real si no.
+    private var displayedPage: Int {
+        isScrubbing ? Int(scrubPage.rounded()) : currentPage
+    }
+
+    /// Si la ventana da sitio para dos páginas, con independencia de que el
+    /// usuario lo tenga activado.
+    ///
+    /// Se decide a partir del tamaño real de la ventana, no de la orientación
+    /// del dispositivo: en Split View o Stage Manager un iPad en horizontal
+    /// puede darle a la app una columna estrecha, y ahí dos páginas juntas se
+    /// verían minúsculas. Medir el ancho disponible cubre los dos casos con
+    /// una sola regla.
+    private func fitsDoublePage(in size: CGSize) -> Bool {
+        size.width > size.height && size.width >= 700
+    }
+
+    /// Si de hecho se están enseñando dos páginas ahora mismo.
+    private func usesDoublePage(in size: CGSize) -> Bool {
+        prefersDoublePage && fitsDoublePage(in: size)
+    }
+
+    private func layout(for size: CGSize) -> SpreadLayout {
+        SpreadLayout(pageCount: totalPages, isDouble: usesDoublePage(in: size))
+    }
+
+    /// Selección del `TabView` en pliegos, derivada de la página actual.
+    ///
+    /// Guardar la PÁGINA y derivar el pliego (en vez de al revés) es lo que
+    /// hace que girar el iPad conserve la posición: la página no cambia, solo
+    /// cambia el pliego que la contiene.
+    private func spreadSelection(for layout: SpreadLayout) -> Binding<Int> {
+        Binding(
+            get: { layout.spreadIndex(containing: currentPage) },
+            set: { currentPage = layout.firstPage(ofSpreadAt: $0) }
+        )
+    }
 
     init(issue: Issue) {
         self.issue = issue
@@ -37,30 +87,43 @@ struct ReaderView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geometry in
+            let spreadLayout = layout(for: geometry.size)
 
-            if let openingError {
-                ContentUnavailableView("No se puede abrir", systemImage: "exclamationmark.triangle",
-                                       description: Text(openingError))
-                    .foregroundStyle(.white)
-            } else if let archive {
-                TabView(selection: $currentPage) {
-                    ForEach(0..<archive.pageCount, id: \.self) { index in
-                        PageView(archive: archive, index: index, fillsWidth: fillsWidth)
-                            .tag(index)
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                if let openingError {
+                    ContentUnavailableView("No se puede abrir", systemImage: "exclamationmark.triangle",
+                                           description: Text(openingError))
+                        .foregroundStyle(.white)
+                } else if let archive {
+                    TabView(selection: spreadSelection(for: spreadLayout)) {
+                        ForEach(Array(spreadLayout.spreads.enumerated()), id: \.offset) { index, spread in
+                            SpreadView(archive: archive,
+                                       spread: spread,
+                                       // "Rellenar ancho" recorta los márgenes de un
+                                       // escaneo, pero en un pliego de dos páginas
+                                       // recortaría justo por el lomo, que es donde
+                                       // están las viñetas a doble página.
+                                       fillsWidth: fillsWidth && spread.pages.count == 1)
+                                .tag(index)
+                        }
                     }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) { showsControls.toggle() }
+                    }
+                } else {
+                    ProgressView().tint(.white)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.2)) { showsControls.toggle() }
-                }
-            } else {
-                ProgressView().tint(.white)
-            }
 
-            if showsControls { controls }
+                if showsControls {
+                    controls(isDouble: usesDoublePage(in: geometry.size),
+                             fitsDouble: fitsDoublePage(in: geometry.size))
+                }
+            }
         }
         .statusBarHidden(!showsControls)
         .navigationBarBackButtonHidden()
@@ -81,7 +144,7 @@ struct ReaderView: View {
 
     // MARK: - Mandos
 
-    private var controls: some View {
+    private func controls(isDouble: Bool, fitsDouble: Bool) -> some View {
         VStack {
             HStack {
                 Button {
@@ -91,11 +154,17 @@ struct ReaderView: View {
                           systemImage: "chevron.left")
                         .font(.footnote)
                 }
+                // El texto del botón es el título del cómic, así que sin
+                // etiqueta VoiceOver lo lee como si fuera un rótulo y no se
+                // entiende que sirva para salir del lector.
+                .accessibilityLabel("Cerrar el lector")
+                .accessibilityHint("Guarda tu progreso y vuelve atrás")
 
                 Spacer()
 
-                Text("Pág. \(currentPage + 1) / \(max(totalPages, 1))")
+                Text("Pág. \(displayedPage + 1) / \(max(totalPages, 1))")
                     .font(.footnote)
+                    .accessibilityLabel("Página \(displayedPage + 1) de \(max(totalPages, 1))")
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
@@ -108,7 +177,13 @@ struct ReaderView: View {
 
             Spacer()
 
-            HStack {
+            if totalPages > 1 {
+                pageSlider
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+            }
+
+            HStack(spacing: 22) {
                 Button {
                     withAnimation { fillsWidth.toggle() }
                 } label: {
@@ -116,6 +191,30 @@ struct ReaderView: View {
                           systemImage: fillsWidth ? "arrow.down.right.and.arrow.up.left" : "arrow.left.and.right")
                         .font(.footnote)
                         .foregroundStyle(fillsWidth ? Theme.premium : .white)
+                }
+                .disabled(isDouble)
+                .opacity(isDouble ? 0.4 : 1)
+                .accessibilityLabel("Ajuste de la página")
+                .accessibilityValue(fillsWidth ? "Rellenando el ancho" : "Página completa")
+                .accessibilityHint(isDouble
+                                   ? "No disponible en doble página"
+                                   : "Alterna entre ver la página entera o rellenar el ancho")
+
+                // El interruptor solo aparece donde la doble página es
+                // posible. En un iPhone en vertical sería un mando que no
+                // hace nada visible, y eso confunde más que ayudar.
+                if fitsDouble && totalPages > 1 {
+                    Button {
+                        withAnimation { prefersDoublePage.toggle() }
+                    } label: {
+                        Label(prefersDoublePage ? "Doble página" : "Página única",
+                              systemImage: prefersDoublePage ? "book.pages" : "doc")
+                            .font(.footnote)
+                            .foregroundStyle(prefersDoublePage ? Theme.premium : .white)
+                    }
+                    .accessibilityLabel("Modo de página")
+                    .accessibilityValue(prefersDoublePage ? "Doble página" : "Página única")
+                    .accessibilityHint("Alterna entre ver una página o dos a la vez.")
                 }
             }
             .padding(.horizontal, 16)
@@ -137,11 +236,36 @@ struct ReaderView: View {
         .transition(.opacity)
     }
 
+    /// Deslizador para saltar directamente a una página. En un CBZ de ciento
+    /// ochenta páginas, pasar de una en una es inusable.
+    private var pageSlider: some View {
+        Slider(
+            value: Binding(
+                get: { isScrubbing ? scrubPage : Double(currentPage) },
+                set: { newValue in
+                    isScrubbing = true
+                    scrubPage = newValue
+                }
+            ),
+            in: 0...Double(max(totalPages - 1, 0)),
+            step: 1,
+            onEditingChanged: { editing in
+                if !editing {
+                    currentPage = Int(scrubPage.rounded())
+                    isScrubbing = false
+                }
+            }
+        )
+        .tint(.white)
+        .accessibilityLabel("Página")
+        .accessibilityValue("\(displayedPage + 1) de \(max(totalPages, 1))")
+    }
+
     // MARK: - Acciones
 
     private func open() async {
         guard let file = importedFile else {
-            openingError = "Este número no tiene ningún archivo importado. Impórtalo desde Perfil ▸ Importar cómic."
+            openingError = "Este número no tiene ningún archivo importado. Impórtalo desde Biblioteca ▸ Importar cómic."
             return
         }
 
@@ -158,8 +282,16 @@ struct ReaderView: View {
                 try? context.save()
             }
 
+            // Se calcula AQUÍ, no dentro de PDFArchive: esta función corre en
+            // el actor principal (herencia del aislamiento por defecto del
+            // proyecto), que es el único sitio desde el que `UIScreen` puede
+            // leerse. `ComicArchiveFactory.open` es `nonisolated` a propósito
+            // para poder llamarse desde el `Task.detached` de abajo, así que
+            // el valor tiene que entrar ya calculado, no calcularse dentro.
+            let pdfTargetWidth = PDFArchive.preferredRenderWidth()
+
             let opened = try await Task.detached(priority: .userInitiated) {
-                try ComicArchiveFactory.open(url: url)
+                try ComicArchiveFactory.open(url: url, pdfTargetWidth: pdfTargetWidth)
             }.value
             guard !Task.isCancelled else { return }
             archive = opened
@@ -197,24 +329,28 @@ struct ReaderView: View {
     }
 }
 
-/// Una página, con zoom por pellizco.
+/// Un pliego: una página, o dos lado a lado en iPad apaisado.
 ///
 /// El zoom SE MANTIENE al soltar los dedos. En la primera versión volvía a 1 en
 /// `onEnded`, lo que hacía imposible detenerse en una viñeta: justo lo que se
 /// espera de un lector de cómics. Al ampliar se habilita el arrastre y se le da
 /// prioridad sobre el paso de página del `TabView`.
-private struct PageView: View {
+///
+/// El zoom y el arrastre se aplican al pliego ENTERO, no a cada página por
+/// separado. Si cada página tuviera su propio zoom, ampliar una viñeta que
+/// cruza el lomo desencajaría las dos mitades.
+private struct SpreadView: View {
     let archive: any ComicArchive
-    let index: Int
+    let spread: SpreadLayout.Spread
     let fillsWidth: Bool
 
     private static let maximumZoom: CGFloat = 5
     private static let doubleTapZoom: CGFloat = 2.5
 
-    @State private var image: UIImage?
+    @State private var images: [Int: UIImage] = [:]
     @State private var zoom: CGFloat = 1
     @State private var offset: CGSize = .zero
-    @State private var loadFailed = false
+    @State private var failedPages: Set<Int> = []
     @State private var loadAttempt = 0
 
     /// Estado transitorio del gesto: se descarta solo al levantar los dedos.
@@ -225,26 +361,43 @@ private struct PageView: View {
         min(max(zoom * pinch, 1), Self.maximumZoom)
     }
 
+    /// Se pinta el pliego en cuanto TODAS sus páginas están listas. Enseñar
+    /// media doble página mientras carga la otra mitad produce un salto de
+    /// composición muy visible.
+    private var isReady: Bool {
+        spread.pages.allSatisfy { images[$0] != nil }
+    }
+
+    private var hasFailed: Bool {
+        !failedPages.isEmpty
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: fillsWidth ? .fill : .fit)
-                        .scaleEffect(effectiveZoom)
-                        .offset(x: offset.width + drag.width,
-                                y: offset.height + drag.height)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
-                        .gesture(magnification(in: geometry.size))
-                        // Solo se roba el arrastre al TabView cuando hay zoom;
-                        // sin ampliar, deslizar sigue pasando de página.
-                        .highPriorityGesture(pan(in: geometry.size), including: zoom > 1 ? .all : .subviews)
-                        .onTapGesture(count: 2) { toggleZoom(in: geometry.size) }
-                        .accessibilityLabel("Página \(index + 1)")
-                        .accessibilityHint("Pellizca para ampliar. Toca dos veces para alternar el zoom.")
-                } else if loadFailed {
+                if isReady {
+                    HStack(spacing: 0) {
+                        ForEach(spread.pages, id: \.self) { page in
+                            if let image = images[page] {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .aspectRatio(contentMode: fillsWidth ? .fill : .fit)
+                            }
+                        }
+                    }
+                    .scaleEffect(effectiveZoom)
+                    .offset(x: offset.width + drag.width,
+                            y: offset.height + drag.height)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .gesture(magnification(in: geometry.size))
+                    // Solo se roba el arrastre al TabView cuando hay zoom;
+                    // sin ampliar, deslizar sigue pasando de página.
+                    .highPriorityGesture(pan(in: geometry.size), including: zoom > 1 ? .all : .subviews)
+                    .onTapGesture(count: 2) { toggleZoom(in: geometry.size) }
+                    .accessibilityLabel(accessibilityLabel)
+                    .accessibilityHint("Pellizca para ampliar. Toca dos veces para alternar el zoom.")
+                } else if hasFailed {
                     VStack(spacing: 12) {
                         Label("Página no disponible", systemImage: "exclamationmark.triangle")
                             .font(.headline)
@@ -259,10 +412,32 @@ private struct PageView: View {
                 }
             }
         }
-        .task(id: loadAttempt) {
-            loadFailed = false
-            image = await archive.page(at: index)
-            loadFailed = image == nil
+        .task(id: taskID) {
+            failedPages = []
+            for page in spread.pages {
+                let image = await archive.page(at: page)
+                guard !Task.isCancelled else { return }
+                if let image {
+                    images[page] = image
+                } else {
+                    failedPages.insert(page)
+                }
+            }
+        }
+    }
+
+    /// Recarga cuando cambia el pliego (al rotar el iPad, una misma vista puede
+    /// pasar de enseñar una página a enseñar dos) o cuando se pulsa Reintentar.
+    private var taskID: String {
+        "\(spread.pages.map(String.init).joined(separator: "-"))#\(loadAttempt)"
+    }
+
+    private var accessibilityLabel: String {
+        switch spread {
+        case .single(let page):
+            return "Página \(page + 1)"
+        case .double(let left, let right):
+            return "Páginas \(left + 1) y \(right + 1)"
         }
     }
 
@@ -307,7 +482,7 @@ private struct PageView: View {
         }
     }
 
-    /// Impide que la página se arrastre fuera de la pantalla y deje un hueco negro.
+    /// Impide que el pliego se arrastre fuera de la pantalla y deje un hueco negro.
     private func clamped(_ proposed: CGSize, in size: CGSize) -> CGSize {
         let limitX = max((size.width * zoom - size.width) / 2, 0)
         let limitY = max((size.height * zoom - size.height) / 2, 0)

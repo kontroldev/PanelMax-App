@@ -42,7 +42,6 @@ enum CollectionFormat: String, Codable, CaseIterable, Identifiable {
 }
 
 /// Ficha que une un número con la estantería del usuario.
-/// Es el modelo que cuenta para el límite del plan gratuito.
 @Model
 final class CollectionEntry {
 

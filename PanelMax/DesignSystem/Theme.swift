@@ -36,25 +36,6 @@ enum Theme {
     }
 }
 
-/// Insignia de premium reutilizable.
-struct PremiumBadge: View {
-    var text: String = "PREMIUM"
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 9, weight: .bold))
-            .tracking(0.5)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .foregroundStyle(Theme.premium)
-            .panelGlass(cornerRadius: 4,
-                        tint: Theme.premium,
-                        fallbackFill: Theme.premiumSoft,
-                        strokeColor: Theme.premium,
-                        strokeWidth: 0.5)
-    }
-}
-
 extension View {
     /// Superficie Liquid Glass de la app, con fallback para versiones anteriores.
     @ViewBuilder
