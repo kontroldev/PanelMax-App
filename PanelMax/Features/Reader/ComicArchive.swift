@@ -243,6 +243,19 @@ nonisolated final class PDFArchive: ComicArchive, @unchecked Sendable {
 
     nonisolated var pageCount: Int { numberOfPages }
 
+    /// Ancho en píxeles al que se rasteriza cada página del PDF.
+    ///
+    /// Se calcula una sola vez a partir de la pantalla del dispositivo, con un
+    /// suelo de 1290 px (para que un iPhone pequeño no renderice páginas
+    /// pobres) y un techo de 2400 px, que es el mismo límite que usa
+    /// `ImageDownsampler` para los CBZ: por encima de eso el coste de memoria
+    /// no compensa la mejora visible.
+    nonisolated static let renderWidth: CGFloat = {
+        let bounds = UIScreen.main.nativeBounds.size
+        let nativeWidth = max(bounds.width, bounds.height) // apaisado incluido
+        return min(max(nativeWidth, 1_290), 2_400)
+    }()
+
     nonisolated func page(at index: Int) async -> UIImage? {
         guard index >= 0, index < numberOfPages else { return nil }
         if let cached = cache.object(forKey: NSNumber(value: index)) { return cached }
@@ -263,7 +276,13 @@ nonisolated final class PDFArchive: ComicArchive, @unchecked Sendable {
 
                 // Nítido en Retina, pero con ambas dimensiones acotadas para que
                 // una página deliberadamente extrema no reserve cientos de MB.
-                let targetWidth: CGFloat = 1_290
+                //
+                // El ancho objetivo se deriva de la pantalla real, no de una
+                // constante: estaba fijado en 1290 px (el ancho del iPhone 16
+                // Pro), así que en un iPad de 13" (2064 px de ancho) cada página
+                // se renderizaba pequeña y el sistema la escalaba hacia arriba,
+                // con el resultado de un PDF visiblemente borroso.
+                let targetWidth = PDFArchive.renderWidth
                 let maximumDimension: CGFloat = 4_096
                 let scale = min(targetWidth / bounds.width,
                                 maximumDimension / max(bounds.width, bounds.height))

@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Mi colección: lo que el usuario ya tiene.
+/// Mi colección: lo que el usuario ya tiene, catalogado a mano.
 ///
 /// Es la pantalla que crea dependencia. Cuanto más tiempo lleva alguien
 /// catalogando aquí, menos se va a otra app, porque sus datos están aquí.
@@ -9,26 +9,25 @@ struct CollectionView: View {
 
     @Query(sort: \Series.title) private var series: [Series]
     @Environment(\.modelContext) private var context
-    @Environment(SubscriptionStore.self) private var store
 
     @State private var filter: CollectionState = .owned
-    @State private var paywall: PaywallReason?
+    @State private var query = ""
+    @State private var showsNewSeries = false
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
-            // Una sola pasada. Antes `issues(of:)` se ejecutaba dos veces por
-            // serie (una en `visibleSeries` y otra en el `ForEach`) y además se
-            // lanzaba un `fetchCount` a SwiftData dentro del cuerpo.
-            let snapshot = CollectionSnapshot(series: series, filter: filter)
+            // Una sola pasada. `issues(of:)` no se evalúa por separado en
+            // cada fila: todo el filtrado (estado + búsqueda) sale de aquí.
+            let snapshot = CollectionSnapshot(series: series, filter: filter, query: query)
 
             Group {
-                if snapshot.groups.isEmpty {
+                if series.isEmpty {
                     emptyState
+                } else if snapshot.groups.isEmpty {
+                    ContentUnavailableView.search(text: query)
                 } else {
                     List {
-                        if !store.isPremium { limitSection(used: snapshot.totalEntries) }
-
                         ForEach(snapshot.groups) { group in
                             Section {
                                 ForEach(group.issues) { issue in
@@ -36,7 +35,11 @@ struct CollectionView: View {
                                 }
                                 .onDelete { offsets in delete(offsets, from: group.issues) }
                             } header: {
-                                header(for: group.series)
+                                NavigationLink {
+                                    SeriesDetailView(series: group.series)
+                                } label: {
+                                    header(for: group.series)
+                                }
                             }
                         }
                     }
@@ -44,8 +47,9 @@ struct CollectionView: View {
                 }
             }
             .navigationTitle("Mi colección")
+            .searchable(text: $query, prompt: "Serie o número")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Picker("Filtro", selection: $filter) {
                         ForEach(CollectionState.allCases) { state in
                             Label(state.label, systemImage: state.systemImage).tag(state)
@@ -53,8 +57,18 @@ struct CollectionView: View {
                     }
                     .pickerStyle(.menu)
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showsNewSeries = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                    }
+                    .accessibilityLabel("Nueva serie")
+                }
             }
-            .paywall($paywall)
+            .sheet(isPresented: $showsNewSeries) {
+                SeriesFormView()
+            }
             .alert("No se ha podido actualizar la colección", isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { visible in if !visible { errorMessage = nil } }
@@ -67,40 +81,12 @@ struct CollectionView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView(
-            filter == .owned ? "Aún no has guardado nada" : "No hay resultados",
-            systemImage: "books.vertical",
-            description: Text(filter == .owned
-                              ? "Los números que marques como tuyos aparecerán aquí."
-                              : "No tienes números con el estado «\(filter.label)».")
-        )
-    }
-
-    // MARK: - Aviso de límite
-
-    /// Se enseña el consumo del plan gratuito ANTES de llegar al tope.
-    /// Toparse con un muro sin avisar es lo que genera reseñas de una estrella.
-    private func limitSection(used: Int) -> some View {
-        Section {
-            let limit = FreeLimits.collectionEntries
-
-            Button { paywall = .general } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("\(used) de \(limit) números")
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        PremiumBadge(text: "AMPLIAR")
-                    }
-                    ProgressView(value: Double(min(used, limit)), total: Double(limit))
-                        .tint(used >= limit ? Theme.accent : Theme.premium)
-                    Text("El plan gratuito guarda hasta \(limit) números.")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.secondaryText)
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Plan gratuito: \(used) de \(limit) números")
+        ContentUnavailableView {
+            Label("Aún no has catalogado nada", systemImage: "books.vertical")
+        } description: {
+            Text("Crea tu primera serie y añade los números que tengas.")
+        } actions: {
+            Button("Crear serie") { showsNewSeries = true }
         }
     }
 
@@ -114,12 +100,15 @@ struct CollectionView: View {
                 Text("\(Int(completion * 100)) %")
                     .foregroundStyle(serie.missingNumbers.isEmpty ? .green : Theme.secondaryText)
             }
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Theme.secondaryText)
         }
     }
 
     private func row(for issue: Issue) -> some View {
         HStack(spacing: 12) {
-            CoverImage(url: issue.coverURL, cornerRadius: 4).frame(width: 38)
+            LocalCoverImage(url: issue.file?.thumbnailURL, cornerRadius: 4).frame(width: 38)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(issue.displayName).font(.subheadline)
@@ -167,8 +156,8 @@ struct CollectionView: View {
 
 // MARK: - Cálculo
 
-/// Series visibles con sus números ya filtrados y ordenados, más el total de
-/// fichas guardadas (el número que se compara con el límite gratuito).
+/// Series visibles con sus números ya filtrados y ordenados, según el estado
+/// elegido y el texto de búsqueda.
 private struct CollectionSnapshot {
 
     struct Group: Identifiable {
@@ -178,19 +167,16 @@ private struct CollectionSnapshot {
     }
 
     let groups: [Group]
-    let totalEntries: Int
 
-    init(series: [Series], filter: CollectionState) {
+    init(series: [Series], filter: CollectionState, query: String) {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         var groups: [Group] = []
-        var total = 0
 
         for serie in series {
             var matching: [Issue] = []
 
             for issue in serie.issues ?? [] {
                 guard let state = issue.entry?.state else { continue }
-                total += 1
-
                 // «Lo tengo» incluye también lo leído: si lo has leído, lo tienes.
                 if state == filter || (filter == .owned && state == .read) {
                     matching.append(issue)
@@ -201,16 +187,26 @@ private struct CollectionSnapshot {
 
             // Orden natural: el "1/2" y los anuales van al final, no al principio.
             matching.sort { ComicNumber.areInIncreasingOrder($0.number, $1.number) }
+
+            if !normalizedQuery.isEmpty {
+                let seriesMatches = serie.title.lowercased().contains(normalizedQuery)
+                if !seriesMatches {
+                    matching = matching.filter {
+                        $0.number.lowercased().contains(normalizedQuery)
+                            || $0.title.lowercased().contains(normalizedQuery)
+                    }
+                }
+                guard !matching.isEmpty else { continue }
+            }
+
             groups.append(Group(series: serie, issues: matching))
         }
 
         self.groups = groups
-        self.totalEntries = total
     }
 }
 
 #Preview {
     CollectionView()
-        .environment(SubscriptionStore())
         .modelContainer(PreviewData.container)
 }

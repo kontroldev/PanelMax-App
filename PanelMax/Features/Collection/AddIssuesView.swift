@@ -1,0 +1,120 @@
+import SwiftUI
+import SwiftData
+
+/// Alta de números: por rango o sueltos.
+///
+/// El alta por rango es lo que hace viable catalogar a mano una colección
+/// real. Sin ella, meter "del 1 al 40" son cuarenta toques uno a uno.
+struct AddIssuesView: View {
+
+    let series: Series
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var mode: Mode = .range
+    @State private var singleNumber = ""
+    @State private var rangeStartText = "1"
+    @State private var rangeEndText = ""
+    @State private var state: CollectionState = .owned
+    @State private var format: CollectionFormat = .physical
+    @State private var errorMessage: String?
+
+    enum Mode: String, CaseIterable, Identifiable {
+        case range = "Rango"
+        case single = "Número suelto"
+        var id: String { rawValue }
+    }
+
+    /// Límite defensivo: evita que un rango escrito por error (o con las
+    /// cifras cambiadas) intente crear cientos de miles de filas de golpe.
+    private static let maximumRangeSize = 2000
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("Modo", selection: $mode) {
+                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+
+                switch mode {
+                case .range:
+                    Section("Del número… al número…") {
+                        TextField("Desde", text: $rangeStartText).keyboardType(.numberPad)
+                        TextField("Hasta", text: $rangeEndText).keyboardType(.numberPad)
+                    } footer: {
+                        Text("Los números que ya tuvieras en esta serie no se duplican.")
+                    }
+                case .single:
+                    Section("Número") {
+                        TextField("Ej. 1/2, Anual 2024, 12", text: $singleNumber)
+                    } footer: {
+                        Text("Sirve para especiales que no encajan en un rango numérico.")
+                    }
+                }
+
+                Section("Cómo lo tienes") {
+                    Picker("Estado", selection: $state) {
+                        ForEach(CollectionState.allCases) { Text($0.label).tag($0) }
+                    }
+                    Picker("Formato", selection: $format) {
+                        ForEach(CollectionFormat.allCases) { Text($0.label).tag($0) }
+                    }
+                }
+            }
+            .navigationTitle("Añadir números")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Añadir") { add() }.disabled(!isValid)
+                }
+            }
+            .alert("No se ha podido añadir", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { visible in if !visible { errorMessage = nil } }
+            )) {
+                Button("De acuerdo", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    private var isValid: Bool {
+        switch mode {
+        case .range:
+            guard let start = Int(rangeStartText), let end = Int(rangeEndText) else { return false }
+            return start <= end && (end - start) < Self.maximumRangeSize
+        case .single:
+            return !singleNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private func add() {
+        do {
+            let store = CollectionStore(context: context)
+            switch mode {
+            case .range:
+                guard let start = Int(rangeStartText), let end = Int(rangeEndText) else { return }
+                try store.addIssueRange(from: start, through: end, to: series, state: state, format: format)
+            case .single:
+                let number = singleNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+                try store.addIssue(number: number, to: series, state: state, format: format)
+            }
+            dismiss()
+        } catch {
+            context.rollback()
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+#Preview {
+    AddIssuesView(series: Series(catalogID: "preview", title: "Serie de ejemplo"))
+        .modelContainer(PreviewData.container)
+}

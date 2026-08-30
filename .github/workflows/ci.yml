@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Los runners de GitHub traen varias versiones de Xcode instaladas.
+      # Se elige la más reciente en vez de fijar un número de versión: así
+      # este paso no se rompe solo cambia el catálogo de imágenes de GitHub.
+      # Si esta build falla aquí, `ls /Applications` en el log te dirá qué
+      # versiones había disponibles ese día.
+      - name: Seleccionar la versión de Xcode más reciente disponible
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Usando $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
+      - name: Resolver dependencias de Swift Package Manager
+        run: xcodebuild -resolvePackageDependencies -project PanelMax.xcodeproj -scheme PanelMax
+
+      - name: Ejecutar tests (Debug, simulador de iPhone)
+        run: |
+          xcodebuild test \
+            -project PanelMax.xcodeproj \
+            -scheme PanelMax \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest'
+
+      - name: Compilar en Release
+        run: |
+          xcodebuild build \
+            -project PanelMax.xcodeproj \
+            -scheme PanelMax \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO

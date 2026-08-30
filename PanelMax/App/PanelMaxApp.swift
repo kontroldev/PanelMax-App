@@ -3,10 +3,9 @@ import SwiftData
 
 /// Punto de entrada de la app.
 ///
-/// Aquí se montan las tres piezas que viven durante toda la sesión:
-/// 1. El contenedor de SwiftData (la colección del usuario).
-/// 2. El `SubscriptionStore` (StoreKit 2), que sabe si hay premium activo.
-/// 3. La fuente de catálogo, inyectada por protocolo para poder cambiarla sin tocar las vistas.
+/// La 1.0 es una app 100% local: sin catálogo remoto, sin cuenta y sin
+/// compras. Lo único que se monta al arrancar es el contenedor de SwiftData
+/// (la colección del usuario) y, la primera vez, el cómic de ejemplo.
 @main
 struct PanelMaxApp: App {
 
@@ -18,13 +17,6 @@ struct PanelMaxApp: App {
     /// Si el almacén persistente no puede abrirse conservamos sus archivos intactos,
     /// arrancamos en modo temporal y explicamos el problema al usuario.
     private let persistenceWarning: String?
-
-    /// Estado de la suscripción. `@State` porque `SubscriptionStore` es `@Observable`.
-    @State private var subscriptions = SubscriptionStore()
-
-    /// Fuente de datos del catálogo. En Debug usa datos ficticios salvo que el
-    /// Scheme solicite el catálogo real; en Release exige un backend configurado.
-    @State private var catalog: any CatalogSource = CatalogSourceFactory.make()
 
     init() {
         var warning: String?
@@ -64,16 +56,13 @@ struct PanelMaxApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(persistenceWarning: persistenceWarning)
-                .environment(subscriptions)       // disponible en toda la jerarquía
-                .environment(\.catalog, catalog)  // fuente de catálogo vía EnvironmentValues
                 .task {
                     // La carpeta de cómics se prepara y se excluye de la copia de
                     // seguridad ANTES de que exista ningún archivo dentro: excluir
                     // después no retira del respaldo lo ya copiado.
                     _ = try? LocalComicFile.prepareComicsDirectory()
 
-                    // Apple exige atender transacciones pendientes nada más abrir la app.
-                    await subscriptions.start()
+                    SampleLibrarySeeder.seedIfNeeded(context: modelContainer.mainContext)
                 }
         }
         .modelContainer(modelContainer)
