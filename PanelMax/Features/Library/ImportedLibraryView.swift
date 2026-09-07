@@ -9,10 +9,10 @@ import UniformTypeIdentifiers
 /// `NavigationLink` en Perfil; al ser una app sin catálogo, importar es una
 /// de las dos cosas que hace la app, así que tiene pestaña propia.
 ///
-/// Al eliminar un archivo, primero se mueve a una papelera interna, después
-/// se guarda la eliminación en SwiftData y solo entonces se borra
-/// físicamente. Si falla el guardado, el movimiento se deshace y el cómic
-/// continúa disponible.
+/// La vista solo orquesta estado de interfaz (qué se enseña, cuándo se
+/// deshabilita un botón) y delega en `LibraryStore` cómo se copian, guardan y
+/// borran los archivos — ver `LibraryStore` para el mecanismo de papelera
+/// interna reversible.
 struct ImportedLibraryView: View {
 
     @Query(sort: \LocalComicFile.importedAt, order: .reverse)
@@ -25,6 +25,8 @@ struct ImportedLibraryView: View {
     @State private var errorMessage: String?
     @State private var query = ""
 
+    private var store: LibraryStore { LibraryStore(context: context) }
+
     private var visibleFiles: [LocalComicFile] {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return files }
@@ -32,6 +34,11 @@ struct ImportedLibraryView: View {
     }
 
     var body: some View {
+        // Se calcula UNA vez: mientras se busca, `visibleFiles` filtra
+        // `files` entero, y antes se leía dos veces por render (`.isEmpty`
+        // arriba y el `ForEach` de la lista) — el mismo filtrado repetido
+        // para pintar lo mismo.
+        let visible = visibleFiles
         NavigationStack {
             Group {
                 if files.isEmpty {
@@ -42,11 +49,11 @@ struct ImportedLibraryView: View {
                     } actions: {
                         Button("Importar cómic") { importComic() }
                     }
-                } else if visibleFiles.isEmpty {
+                } else if visible.isEmpty {
                     ContentUnavailableView.search(text: query)
                 } else {
                     List {
-                        ForEach(visibleFiles) { file in
+                        ForEach(visible) { file in
                             NavigationLink {
                                 ReaderView(file: file)
                             } label: {
@@ -111,10 +118,6 @@ struct ImportedLibraryView: View {
         showsImporter = true
     }
 
-    /// Copia el archivo dentro del contenedor de la app y genera su miniatura.
-    ///
-    /// Copiar en vez de guardar solo el marcador evita el problema clásico:
-    /// el usuario borra el archivo de iCloud Drive y el cómic deja de abrirse.
     private func handleImport(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
@@ -126,50 +129,21 @@ struct ImportedLibraryView: View {
         case .success(let urls):
             guard !urls.isEmpty, !isImporting else { return }
 
-            guard ComicImportCoordinator.begin() else {
+            guard store.beginImporting() else {
                 errorMessage = "Ya hay otra importación en curso. Espera a que termine antes de añadir más cómics."
                 return
             }
 
             isImporting = true
-            let container = context.container
+            let importer = store
 
             Task {
                 defer {
                     isImporting = false
-                    ComicImportCoordinator.end()
+                    importer.endImporting()
                 }
                 do {
-                    let drafts = try await Task.detached(priority: .userInitiated) {
-                        try ComicImportBatch.copy(urls)
-                    }.value
-
-                    do {
-                        // Un contexto separado hace que un fallo del lote no revierta
-                        // cambios no relacionados de la interfaz principal.
-                        let importContext = ModelContext(container)
-                        for draft in drafts {
-                            let file = LocalComicFile(displayName: draft.displayName,
-                                                      localFilename: draft.filename)
-                            file.fileSize = draft.fileSize
-                            file.pageCount = draft.pageCount
-
-                            // La portada sale de la propia página 1. Si falla,
-                            // el cómic se importa igual, solo que sin miniatura.
-                            if let data = await ThumbnailGenerator.makeThumbnail(for: draft.url),
-                               let thumbnailFilename = try? ThumbnailStore.save(data) {
-                                file.thumbnailFilename = thumbnailFilename
-                            }
-
-                            importContext.insert(file)
-                        }
-                        try importContext.save()
-                    } catch {
-                        guard ComicImportBatch.rollback(drafts) else {
-                            throw ComicImportError.cleanupFailed
-                        }
-                        throw ComicImportError.persistence(error.localizedDescription)
-                    }
+                    try await importer.importFiles(from: urls)
                 } catch {
                     errorMessage = error.localizedDescription
                 }
@@ -181,45 +155,10 @@ struct ImportedLibraryView: View {
 
     private func delete(at offsets: IndexSet) {
         let selected = offsets.compactMap { visibleFiles.indices.contains($0) ? visibleFiles[$0] : nil }
-        guard !selected.isEmpty else { return }
-
-        var staged: [PendingComicDeletion] = []
         do {
-            // Se preparan todos antes de tocar SwiftData: borrar varias filas es
-            // una única operación y no puede quedar a medias.
-            for file in selected {
-                if let deletion = try PendingComicDeletion.stage(file) {
-                    staged.append(deletion)
-                }
-            }
-
-            let thumbnailsToRemove = selected.map(\.thumbnailFilename)
-            selected.forEach(context.delete)
-            try context.save()
-
-            for deletion in staged {
-                do {
-                    try deletion.finish()
-                } catch {
-                    // El registro ya no existe. La copia queda en una carpeta de
-                    // limpieza y se reintentará al volver a abrir esta pantalla.
-                    errorMessage = "El cómic se quitó de la biblioteca, pero su copia interna no se ha podido limpiar todavía. PanelMax volverá a intentarlo."
-                }
-            }
-            thumbnailsToRemove.forEach(ThumbnailStore.delete)
+            try store.delete(selected)
         } catch {
-            context.rollback()
-            var restorationFailed = false
-            for deletion in staged.reversed() {
-                do {
-                    try deletion.restore()
-                } catch {
-                    restorationFailed = true
-                }
-            }
-            errorMessage = restorationFailed
-                ? "\(error.localizedDescription) Las copias que no pudieron volver a su ubicación se han conservado en la carpeta de recuperación y no se borrarán."
-                : error.localizedDescription
+            errorMessage = error.localizedDescription
         }
     }
 }
@@ -281,296 +220,6 @@ private struct ImportedComicRow: View {
         guard let filename = file.localFilename else { return "ARCHIVO" }
         let value = (filename as NSString).pathExtension.uppercased()
         return value == "ZIP" ? "CBZ" : value
-    }
-}
-
-/// Movimiento reversible de una copia privada. Nunca se toca el archivo externo
-/// de un bookmark: PanelMax solo es dueño de lo que copió a `Documents/Comics`.
-private struct PendingComicDeletion {
-    let original: URL
-    let pending: URL
-
-    static var directory: URL {
-        LocalComicFile.comicsDirectory
-            .appending(path: ".PendingDeletion", directoryHint: .isDirectory)
-    }
-
-    static func stage(_ file: LocalComicFile) throws -> PendingComicDeletion? {
-        let original: URL
-        do {
-            guard let localURL = try file.localCopyURL() else { return nil }
-            original = localURL
-        } catch {
-            // Un nombre persistido manipulado se puede quitar de la biblioteca,
-            // pero por seguridad jamás se usa para una operación de archivos.
-            return nil
-        }
-
-        guard FileManager.default.fileExists(atPath: original.path) else { return nil }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let recoveryDirectory = directory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: recoveryDirectory, withIntermediateDirectories: false)
-        let pending = recoveryDirectory.appending(path: original.lastPathComponent, directoryHint: .notDirectory)
-        try FileManager.default.moveItem(at: original, to: pending)
-        return PendingComicDeletion(original: original, pending: pending)
-    }
-
-    func restore() throws {
-        guard FileManager.default.fileExists(atPath: pending.path) else { return }
-        try FileManager.default.moveItem(at: pending, to: original)
-        try? FileManager.default.removeItem(at: pending.deletingLastPathComponent())
-    }
-
-    func finish() throws {
-        guard FileManager.default.fileExists(atPath: pending.path) else { return }
-        try FileManager.default.removeItem(at: pending.deletingLastPathComponent())
-    }
-
-    /// Limpia eliminaciones confirmadas y recupera automáticamente una copia si
-    /// el registro SwiftData volvió tras un fallo de guardado. El nombre original
-    /// se conserva como nombre del archivo dentro de cada carpeta de recuperación.
-    static func cleanup(protecting filenames: Set<String>) {
-        guard let recoveryDirectories = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: []
-        ) else { return }
-
-        for recoveryDirectory in recoveryDirectories {
-            guard let pendingFiles = try? FileManager.default.contentsOfDirectory(
-                at: recoveryDirectory,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
-            ) else { continue }
-
-            guard let pending = pendingFiles.first else {
-                try? FileManager.default.removeItem(at: recoveryDirectory)
-                continue
-            }
-
-            let originalFilename = pending.lastPathComponent
-            if filenames.contains(originalFilename) {
-                // Hay registro: si su ruta está vacía, completamos la restauración.
-                if let original = try? LocalComicFile.storageURL(for: originalFilename),
-                   !FileManager.default.fileExists(atPath: original.path) {
-                    try? FileManager.default.moveItem(at: pending, to: original)
-                    if !FileManager.default.fileExists(atPath: pending.path) {
-                        try? FileManager.default.removeItem(at: recoveryDirectory)
-                    }
-                }
-            } else {
-                // Ya no hay metadatos que apunten a esta copia: la eliminación se
-                // guardó correctamente y es seguro completar el borrado físico.
-                try? FileManager.default.removeItem(at: recoveryDirectory)
-            }
-        }
-    }
-}
-
-/// Evita que dos importaciones se ejecuten a la vez.
-///
-/// Sin este guardián, pulsar «Importar» dos veces seguidas — o dos ventanas
-/// de la misma app en Stage Manager en iPad — podría lanzar dos lotes de
-/// copia simultáneos sobre la misma carpeta `Comics/`. `@MainActor` porque
-/// solo se llama desde el hilo principal, al iniciar y terminar la tarea de
-/// importación de la interfaz.
-@MainActor
-private enum ComicImportCoordinator {
-    private static var isImporting = false
-
-    @discardableResult
-    static func begin() -> Bool {
-        guard !isImporting else { return false }
-        isImporting = true
-        return true
-    }
-
-    static func end() {
-        isImporting = false
-    }
-}
-
-private struct ImportedComicDraft: Sendable {
-    let displayName: String
-    let filename: String
-    let fileSize: Int64
-    let pageCount: Int
-    let url: URL
-}
-
-private enum ComicImportError: LocalizedError {
-    case unavailable(String)
-    case unsupported(String)
-    case tooLarge(String)
-    case batchTooLarge
-    case insufficientSpace
-    case persistence(String)
-    case cleanupFailed
-
-    var errorDescription: String? {
-        switch self {
-        case .unavailable(let name):
-            return "No se puede acceder a «\(name)». Comprueba que siga disponible en Archivos o iCloud Drive."
-        case .unsupported(let name):
-            return "«\(name)» no es un CBZ o PDF compatible."
-        case .tooLarge(let name):
-            return "«\(name)» supera el tamaño máximo de 2 GB por archivo."
-        case .batchTooLarge:
-            return "La selección supera el máximo de 4 GB por importación. Divide los archivos en varios lotes."
-        case .insufficientSpace:
-            return "No hay espacio libre suficiente para copiar estos cómics de forma segura."
-        case .persistence(let detail):
-            return "Los archivos se han revertido porque no se pudo guardar la biblioteca: \(detail)"
-        case .cleanupFailed:
-            return "No se ha podido revertir por completo la copia. PanelMax conservará los archivos temporales para evitar perder datos; comprueba el espacio disponible y vuelve a intentarlo."
-        }
-    }
-}
-
-/// Copia atómica de un lote. Los archivos se validan dentro de una carpeta
-/// temporal privada y solo se mueven a su nombre definitivo cuando todos han
-/// pasado las comprobaciones. Cualquier error elimina el lote completo.
-private enum ComicImportBatch {
-    nonisolated static func copy(_ sources: [URL]) throws -> [ImportedComicDraft] {
-        let manager = FileManager.default
-        // Crea la carpeta y la excluye de la copia de seguridad de iCloud.
-        let destination = try LocalComicFile.prepareComicsDirectory()
-        let staging = destination.appending(path: ".Importing-\(UUID().uuidString)", directoryHint: .isDirectory)
-        let maximumFileSize: Int64 = 2 * 1_024 * 1_024 * 1_024
-        let maximumBatchSize: Int64 = 4 * 1_024 * 1_024 * 1_024
-        let safetyReserve: Int64 = 200 * 1_024 * 1_024
-
-        cleanupAbandonedStaging(in: destination, using: manager)
-        try manager.createDirectory(at: staging, withIntermediateDirectories: true)
-        var staged: [(displayName: String, filename: String, size: Int64, pages: Int, url: URL)] = []
-        var batchSize: Int64 = 0
-
-        for source in sources {
-            let name = source.lastPathComponent
-            let ext = source.pathExtension.lowercased()
-            guard ["cbz", "zip", "pdf"].contains(ext) else {
-                throw ComicImportError.unsupported(name)
-            }
-
-            let didAccess = source.startAccessingSecurityScopedResource()
-            do {
-                var isDirectory: ObjCBool = false
-                guard manager.fileExists(atPath: source.path, isDirectory: &isDirectory),
-                      !isDirectory.boolValue else {
-                    throw ComicImportError.unavailable(name)
-                }
-
-                let attributes = try manager.attributesOfItem(atPath: source.path)
-                guard attributes[.type] as? FileAttributeType == .typeRegular,
-                      let number = attributes[.size] as? NSNumber else {
-                    throw ComicImportError.unavailable(name)
-                }
-
-                let size = number.int64Value
-                guard size > 0 else { throw ComicImportError.unsupported(name) }
-                guard size <= maximumFileSize else { throw ComicImportError.tooLarge(name) }
-                let (newBatchSize, overflow) = batchSize.addingReportingOverflow(size)
-                guard !overflow, newBatchSize <= maximumBatchSize else {
-                    throw ComicImportError.batchTooLarge
-                }
-                batchSize = newBatchSize
-
-                if let capacity = try destination.resourceValues(
-                    forKeys: [.volumeAvailableCapacityForImportantUsageKey]
-                ).volumeAvailableCapacityForImportantUsage,
-                   capacity < size + safetyReserve {
-                    throw ComicImportError.insufficientSpace
-                }
-
-                let filename = "\(UUID().uuidString).\(ext)"
-                let temporaryURL = staging.appending(path: filename, directoryHint: .notDirectory)
-                try manager.copyItem(at: source, to: temporaryURL)
-
-                let pages: Int
-                do {
-                    pages = try ComicArchiveFactory.pageCount(at: temporaryURL)
-                } catch {
-                    throw ComicImportError.unsupported(name)
-                }
-
-                let rawDisplayName = source.deletingPathExtension().lastPathComponent
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                let displayName = String((rawDisplayName.isEmpty ? "Cómic importado" : rawDisplayName).prefix(160))
-                staged.append((displayName, filename, size, pages, temporaryURL))
-            } catch {
-                if didAccess { source.stopAccessingSecurityScopedResource() }
-                do {
-                    try manager.removeItem(at: staging)
-                } catch {
-                    throw ComicImportError.cleanupFailed
-                }
-                throw error
-            }
-            if didAccess { source.stopAccessingSecurityScopedResource() }
-        }
-
-        var completed: [ImportedComicDraft] = []
-        do {
-            for item in staged {
-                let finalURL = destination.appending(path: item.filename, directoryHint: .notDirectory)
-                try manager.moveItem(at: item.url, to: finalURL)
-                completed.append(ImportedComicDraft(displayName: item.displayName,
-                                                     filename: item.filename,
-                                                     fileSize: item.size,
-                                                     pageCount: item.pages,
-                                                     url: finalURL))
-            }
-            try manager.removeItem(at: staging)
-            return completed
-        } catch {
-            let removedFinals = rollback(completed)
-            let removedStaging: Bool
-            do {
-                if manager.fileExists(atPath: staging.path) { try manager.removeItem(at: staging) }
-                removedStaging = true
-            } catch {
-                removedStaging = false
-            }
-            guard removedFinals, removedStaging else { throw ComicImportError.cleanupFailed }
-            throw error
-        }
-    }
-
-    @discardableResult
-    nonisolated static func rollback(_ drafts: [ImportedComicDraft]) -> Bool {
-        var succeeded = true
-        for draft in drafts {
-            do {
-                if FileManager.default.fileExists(atPath: draft.url.path) {
-                    try FileManager.default.removeItem(at: draft.url)
-                }
-            } catch {
-                succeeded = false
-            }
-        }
-        return succeeded
-    }
-
-    /// Si iOS terminó la app en mitad de una copia, el `defer` no pudo ejecutarse.
-    /// Solo se limpian lotes con más de 24 horas para no interferir con otra escena
-    /// que esté importando en ese momento.
-    nonisolated private static func cleanupAbandonedStaging(in directory: URL,
-                                                            using manager: FileManager) {
-        let keys: Set<URLResourceKey> = [.isDirectoryKey, .contentModificationDateKey]
-        guard let contents = try? manager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: Array(keys),
-            options: []
-        ) else { return }
-
-        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
-        for url in contents where url.lastPathComponent.hasPrefix(".Importing-") {
-            guard let values = try? url.resourceValues(forKeys: keys),
-                  values.isDirectory == true,
-                  let modificationDate = values.contentModificationDate,
-                  modificationDate < cutoff else { continue }
-            try? manager.removeItem(at: url)
-        }
     }
 }
 

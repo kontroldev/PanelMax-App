@@ -15,7 +15,7 @@ final class LocalComicFile {
     var bookmark: Data?
 
     /// Copia interna del archivo dentro del contenedor de la app.
-    /// Alternativa al marcador cuando el usuario elige "copiar a PanelMax".
+    /// Alternativa al marcador cuando el usuario elige copiar el archivo a la app.
     var localFilename: String?
 
     /// El marcador resolvió pero iOS lo dio por obsoleto. No se persiste:

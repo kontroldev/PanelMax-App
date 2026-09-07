@@ -18,7 +18,7 @@ enum ComicArchiveError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .fileUnavailable:   return "El archivo ya no está disponible en este dispositivo."
-        case .unsupportedFormat: return "Formato no admitido. PanelMax abre CBZ y PDF."
+        case .unsupportedFormat: return "Formato no admitido. \(AppInfo.displayName) abre CBZ y PDF."
         case .emptyArchive:      return "El archivo no contiene páginas."
         case .archiveTooLarge:   return "El archivo supera el tamaño máximo admitido de 2 GB."
         case .tooManyPages:      return "El archivo contiene demasiadas páginas para abrirlo de forma segura."

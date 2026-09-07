@@ -45,7 +45,7 @@ struct RootView: View {
         .alert("La colección no está disponible", isPresented: $showsPersistenceWarning) {
             Button("De acuerdo", role: .cancel) {}
         } message: {
-            Text("PanelMax ha arrancado en modo temporal para no modificar tus datos. Cierra la app y vuelve a intentarlo después de actualizarla. Detalle: \(persistenceWarning ?? "")")
+            Text("\(AppInfo.displayName) ha arrancado en modo temporal para no modificar tus datos. Cierra la app y vuelve a intentarlo después de actualizarla. Detalle: \(persistenceWarning ?? "")")
         }
     }
 }

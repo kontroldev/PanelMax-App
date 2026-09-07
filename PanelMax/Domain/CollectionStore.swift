@@ -32,26 +32,36 @@ struct CollectionStore {
     func createSeries(title: String,
                        publisher: String = "",
                        startYear: Int? = nil,
-                       totalIssues: Int = 0) throws -> Series {
+                       totalIssues: Int = 0,
+                       coverImageFilename: String? = nil) throws -> Series {
         let series = Series(catalogID: UUID().uuidString,
                             title: title,
                             publisher: publisher,
                             startYear: startYear,
+                            coverImageFilename: coverImageFilename,
                             totalIssues: totalIssues)
         context.insert(series)
         try context.save()
         return series
     }
 
+    /// El llamador es quien decide qué archivo de portada acaba en disco: esta
+    /// función solo escribe el nombre en el modelo. Reemplazar o quitar una
+    /// portada existente implica borrar el archivo antiguo de
+    /// `Documents/Covers`, y eso solo debe hacerse una vez que este `save()`
+    /// ha tenido éxito (ver `SeriesFormView.save()`), para no dejar el modelo
+    /// apuntando a un archivo ya borrado si el guardado fallara.
     func updateSeries(_ series: Series,
                        title: String,
                        publisher: String,
                        startYear: Int?,
-                       totalIssues: Int) throws {
+                       totalIssues: Int,
+                       coverImageFilename: String?) throws {
         series.title = title
         series.publisher = publisher
         series.startYear = startYear
         series.totalIssues = totalIssues
+        series.coverImageFilename = coverImageFilename
         try context.save()
     }
 
@@ -74,14 +84,16 @@ struct CollectionStore {
                   to series: Series,
                   state: CollectionState = .owned,
                   format: CollectionFormat = .physical) throws -> Issue {
-        let issue = insertIssue(number: number, title: title, into: series, state: state, format: format)
+        var existingByNumber = indexByNumber(series.issues ?? [])
+        let issue = insertIssue(number: number, title: title, into: series, state: state, format: format,
+                                 existingByNumber: &existingByNumber)
         try context.save()
         return issue
     }
 
     /// Añade todo un rango de una vez ("del 1 al 40"). Es lo que hace viable
     /// catalogar a mano una colección real: sin esto, cuarenta números son
-    /// cuarenta altas sueltas.
+    /// cuarenta altas sueltas. `AddIssuesView` permite hasta 2000 de golpe.
     @discardableResult
     func addIssueRange(from: Int,
                         through: Int,
@@ -89,21 +101,40 @@ struct CollectionStore {
                         state: CollectionState = .owned,
                         format: CollectionFormat = .physical) throws -> [Issue] {
         guard from <= through else { return [] }
+        // El índice se construye UNA vez y se va actualizando dentro del
+        // bucle. Sin esto, `insertIssue` recorría `series.issues` entero en
+        // cada número del rango — y ese array crece en cada iteración — así
+        // que añadir N números costaba O(N²) en vez de O(N). Con el tope de
+        // 2000 números de `AddIssuesView`, la diferencia es real: ~2.000.000
+        // de comparaciones frente a 2000.
+        var existingByNumber = indexByNumber(series.issues ?? [])
         let issues = (from...through).map {
-            insertIssue(number: String($0), title: "", into: series, state: state, format: format)
+            insertIssue(number: String($0), title: "", into: series, state: state, format: format,
+                        existingByNumber: &existingByNumber)
         }
         try context.save()
         return issues
     }
 
+    /// Número → `Issue` ya insertado en la serie, para no recorrer el array
+    /// entero en cada alta.
+    private func indexByNumber(_ issues: [Issue]) -> [String: Issue] {
+        Dictionary(issues.map { ($0.number, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
     /// Núcleo sin guardar, compartido por el alta suelta y el alta por rango:
     /// añadir doce números debe ser un único `save()`, no doce.
+    ///
+    /// `existingByNumber` se pasa por referencia y se actualiza aquí mismo:
+    /// así una alta por rango nunca vuelve a mirar en `series.issues`, ni
+    /// pierde de vista los números que ella misma acaba de insertar.
     private func insertIssue(number: String,
                               title: String,
                               into series: Series,
                               state: CollectionState,
-                              format: CollectionFormat) -> Issue {
-        if let existing = (series.issues ?? []).first(where: { $0.number == number }) {
+                              format: CollectionFormat,
+                              existingByNumber: inout [String: Issue]) -> Issue {
+        if let existing = existingByNumber[number] {
             if existing.entry == nil {
                 let entry = CollectionEntry(state: state, format: format)
                 entry.issue = existing
@@ -119,6 +150,8 @@ struct CollectionStore {
         let entry = CollectionEntry(state: state, format: format)
         entry.issue = issue
         context.insert(entry)
+
+        existingByNumber[number] = issue
         return issue
     }
 

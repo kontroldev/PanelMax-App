@@ -67,8 +67,10 @@ struct CollectionStoreTests {
         _ = try store.addIssue(number: "1", to: series, state: .read)
 
         #expect(series.issues?.count == 1)
-        #expect(series.issues?.first?.entry?.state == .read)
-    }
+        // El segundo alta no duplica NI pisa el estado ya guardado: cambiarlo
+        // es trabajo de `setState`, no del alta. Mismo contrato que el alta
+        // por rango (ver `addIssueRangeSkipsExisting`).
+        #expect(series.issues?.first?.entry?.state == .owned)    }
 
     @Test("Un rango añade todos los números y respeta lo que ya existía")
     func addIssueRangeSkipsExisting() throws {

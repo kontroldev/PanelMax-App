@@ -8,19 +8,27 @@ import UIKit
 /// rejilla necesita pintar una miniatura.
 enum ThumbnailGenerator {
 
-    nonisolated private static let maxDimension: CGFloat = 640
-    nonisolated private static let compressionQuality: CGFloat = 0.7
-
     /// Abre el archivo ya copiado, extrae su primera página y la reduce a un
     /// tamaño de miniatura. Nunca lanza: una portada que falla no debe impedir
     /// que la importación termine con éxito.
     nonisolated static func makeThumbnail(for url: URL) async -> Data? {
         guard let archive = try? ComicArchiveFactory.open(url: url) else { return nil }
         guard let page = await archive.page(at: 0) else { return nil }
-        return downscaled(page)
+        return ImageResizer.jpegData(from: page)
     }
+}
 
-    nonisolated private static func downscaled(_ image: UIImage) -> Data? {
+/// Reduce y comprime cualquier `UIImage` a un tamaño manejable como
+/// miniatura. Compartido por la portada que se extrae de la página 1 de un
+/// cómic y por la que el usuario elige a mano para una serie: ambas deben
+/// caber en unos pocos KB en `Documents/Covers`, no en los varios MB que
+/// entrega la Fototeca directamente.
+enum ImageResizer {
+
+    nonisolated private static let maxDimension: CGFloat = 640
+    nonisolated private static let compressionQuality: CGFloat = 0.7
+
+    nonisolated static func jpegData(from image: UIImage) -> Data? {
         let width = max(image.size.width, 1)
         let height = max(image.size.height, 1)
         let scale = min(maxDimension / width, maxDimension / height, 1)

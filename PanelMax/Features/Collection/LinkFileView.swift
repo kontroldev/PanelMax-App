@@ -16,6 +16,8 @@ struct LinkFileView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
 
+    private var store: CollectionStore { CollectionStore(context: context) }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -69,7 +71,7 @@ struct LinkFileView: View {
 
     private func link(_ file: LocalComicFile) {
         do {
-            try CollectionStore(context: context).link(file, to: issue)
+            try store.link(file, to: issue)
             dismiss()
         } catch {
             context.rollback()

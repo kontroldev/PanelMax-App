@@ -44,7 +44,7 @@ struct HomeView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
             }
-            .navigationTitle("PanelMax")
+            .navigationTitle(AppInfo.displayName)
         }
     }
 
@@ -180,44 +180,6 @@ struct HomeView: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - Cálculo de secciones
-
-/// Todo lo que Inicio necesita derivar de la colección, calculado de una vez.
-private struct HomeSnapshot {
-
-    let collectionSeries: [Series]
-    let missingHighlights: [Gap]
-
-    var isEmpty: Bool { collectionSeries.isEmpty }
-
-    init(series: [Series]) {
-        var collection: [Series] = []
-        var gaps: [Gap] = []
-
-        for serie in series {
-            guard !serie.allOwnedIssues.isEmpty else { continue }
-            collection.append(serie)
-
-            // Un hueco por serie como máximo: si enseñas los doce que le
-            // faltan a alguien, deja de ser una ayuda y es un reproche.
-            if let first = serie.missingNumbers.first {
-                gaps.append(Gap(series: serie, number: first))
-            }
-        }
-
-        self.collectionSeries = collection
-        self.missingHighlights = gaps
-    }
-
-    struct Gap: Identifiable {
-        let series: Series
-        let number: Int
-        /// `persistentModelID` en lugar de `catalogID`: dos series sin id
-        /// propio producían la misma clave y SwiftUI reciclaba mal las celdas.
-        var id: String { "\(series.persistentModelID.hashValue)-\(number)" }
     }
 }
 

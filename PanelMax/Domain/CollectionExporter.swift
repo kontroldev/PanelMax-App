@@ -59,7 +59,7 @@ enum CollectionExporter {
         let data = try makeJSON(series: series)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        let filename = "PanelMax-\(formatter.string(from: .now)).json"
+        let filename = "\(AppInfo.displayName)-\(formatter.string(from: .now)).json"
         let url = FileManager.default.temporaryDirectory.appending(path: filename, directoryHint: .notDirectory)
         try data.write(to: url, options: .atomic)
         return url

@@ -40,6 +40,27 @@ struct CollectionMathTests {
         #expect(series.missingNumbers.isEmpty)
     }
 
+    @Test("Una amplitud desmesurada no rastrea huecos")
+    func absurdSpanIsIgnored() throws {
+        let context = ModelContext(try makeTestContainer())
+        // El caso real: teclear «99999» en vez de «99» en el alta suelta, que
+        // no tiene el tope de 2.000 del alta por rango. Sin techo, esto
+        // construiría un array de casi cien mil elementos.
+        let series = makeSeries(in: context, numbers: ["1", "99999"])
+
+        #expect(series.missingNumbers.isEmpty)
+    }
+
+    @Test("Justo en el techo todavía se rastrea")
+    func spanAtTheLimitStillWorks() throws {
+        let context = ModelContext(try makeTestContainer())
+        // La amplitud es exactamente `maximumGapSpan`, así que entra.
+        let last = 1 + Series.maximumGapSpan
+        let series = makeSeries(in: context, numbers: ["1", String(last)])
+
+        #expect(series.missingNumbers.count == Series.maximumGapSpan - 1)
+    }
+
     @Test("Una serie vacía no produce huecos")
     func emptySeriesHasNoGaps() throws {
         let context = ModelContext(try makeTestContainer())

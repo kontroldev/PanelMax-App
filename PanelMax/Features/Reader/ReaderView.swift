@@ -33,6 +33,14 @@ struct ReaderView: View {
     @State private var isScrubbing = false
     @State private var scrubPage: Double = 0
 
+    private var store: CollectionStore { CollectionStore(context: context) }
+
+    /// Memoiza el pliego calculado. Sin esto, `layout(for:)` reconstruía un
+    /// array del tamaño del cómic entero en CADA evaluación de `body`: cada
+    /// cambio de página, cada toque para mostrar u ocultar los mandos, cada
+    /// punto del arrastre del deslizador. Ver `SpreadLayoutCache` más abajo.
+    @State private var layoutCache = SpreadLayoutCache()
+
     private var totalPages: Int { archive?.pageCount ?? 0 }
 
     /// Página mostrada en la cabecera: la del arrastre en curso si se está
@@ -59,7 +67,7 @@ struct ReaderView: View {
     }
 
     private func layout(for size: CGSize) -> SpreadLayout {
-        SpreadLayout(pageCount: totalPages, isDouble: usesDoublePage(in: size))
+        layoutCache.layout(pageCount: totalPages, isDouble: usesDoublePage(in: size))
     }
 
     /// Selección del `TabView` en pliegos, derivada de la página actual.
@@ -315,8 +323,7 @@ struct ReaderView: View {
             if let issue {
                 // `saveProgress` guarda todo el contexto, incluido el progreso
                 // propio del archivo actualizado justo arriba.
-                try CollectionStore(context: context)
-                    .saveProgress(for: issue, page: currentPage, totalPages: totalPages)
+                try store.saveProgress(for: issue, page: currentPage, totalPages: totalPages)
             } else {
                 try context.save()
             }
@@ -326,6 +333,32 @@ struct ReaderView: View {
             if reportErrors { progressError = error.localizedDescription }
             return false
         }
+    }
+}
+
+// MARK: - Caché del pliego
+
+/// Memoiza el último `SpreadLayout` calculado, con su clave `(pageCount,
+/// isDouble)`. Guardada en `@State` solo para conservar la MISMA instancia
+/// entre evaluaciones de `body` — no para que SwiftUI observe sus mutaciones:
+/// es una clase normal, no `@Observable`, así que mutarla dentro de `body` es
+/// seguro y no invalida la vista por sí sola.
+///
+/// `SpreadLayout(pageCount:isDouble:)` es O(páginas): sin esta caché se
+/// reconstruía en cada cambio de página, cada toque para mostrar los mandos
+/// y cada punto del arrastre del deslizador, aunque ni el número de páginas
+/// ni el modo doble hubieran cambiado.
+private final class SpreadLayoutCache {
+    private var pageCount = -1
+    private var isDouble = false
+    private var cached = SpreadLayout(pageCount: 0, isDouble: false)
+
+    func layout(pageCount: Int, isDouble: Bool) -> SpreadLayout {
+        guard pageCount != self.pageCount || isDouble != self.isDouble else { return cached }
+        self.pageCount = pageCount
+        self.isDouble = isDouble
+        cached = SpreadLayout(pageCount: pageCount, isDouble: isDouble)
+        return cached
     }
 }
 

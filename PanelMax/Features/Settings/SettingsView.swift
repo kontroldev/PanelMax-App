@@ -13,6 +13,8 @@ struct SettingsView: View {
     @State private var exportURL: URL?
     @State private var exportError: String?
 
+    private var store: CollectionStore { CollectionStore(context: context) }
+
     var body: some View {
         NavigationStack {
             List {
@@ -36,7 +38,7 @@ struct SettingsView: View {
     // MARK: - Estadísticas
 
     private var stats: (entries: Int, seriesCount: Int) {
-        (CollectionStore(context: context).entryCount(), series.count)
+        (store.entryCount(), series.count)
     }
 
     private var statsSection: some View {
@@ -69,7 +71,7 @@ struct SettingsView: View {
         } header: {
             Text("Copia de seguridad")
         } footer: {
-            Text("PanelMax no usa iCloud ni cuenta: esta exportación es tu única copia de la colección catalogada a mano. Los archivos importados no se incluyen, solo los datos de qué tienes y en qué estado.")
+            Text("\(AppInfo.displayName) no usa iCloud ni cuenta: esta exportación es tu única copia de la colección catalogada a mano. Los archivos importados no se incluyen, solo los datos de qué tienes y en qué estado.")
         }
     }
 
@@ -100,7 +102,7 @@ struct SettingsView: View {
         } header: {
             Text("Acerca de")
         } footer: {
-            Text("PanelMax funciona sin conexión: no envía ni recibe nada por internet. Todo lo que catalogas y todo lo que importas se queda en tu dispositivo.")
+            Text("\(AppInfo.displayName) funciona sin conexión: no envía ni recibe nada por internet. Todo lo que catalogas y todo lo que importas se queda en tu dispositivo.")
         }
     }
 }

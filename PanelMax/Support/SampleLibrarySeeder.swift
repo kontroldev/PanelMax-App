@@ -34,7 +34,7 @@ enum SampleLibrarySeeder {
                 try FileManager.default.copyItem(at: bundledURL, to: target)
             }
 
-            let file = LocalComicFile(displayName: "Bienvenido a PanelMax", localFilename: storedFilename)
+            let file = LocalComicFile(displayName: "Bienvenido a \(AppInfo.displayName)", localFilename: storedFilename)
             file.pageCount = (try? ComicArchiveFactory.pageCount(at: target)) ?? 0
 
             context.insert(file)
