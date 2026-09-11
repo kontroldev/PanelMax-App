@@ -107,8 +107,7 @@ struct SeriesDetailView: View {
 
     private var headerCard: some View {
         HStack(alignment: .top, spacing: 12) {
-            LocalCoverImage(url: series.coverImageURL, cornerRadius: 8)
-                .frame(width: 64)
+            LocalCoverImage(url: series.coverImageURL, width: 64, cornerRadius: 8)
                 .accessibilityHidden(true) // decorativa: el título ya se anuncia
 
             VStack(alignment: .leading, spacing: 5) {

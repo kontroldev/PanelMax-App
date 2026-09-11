@@ -180,8 +180,28 @@ struct CollectionStore {
 
     /// Asocia un cómic ya importado a un número concreto, para poder leerlo
     /// desde la ficha de la serie.
+    ///
+    /// Si la serie todavía no tiene portada propia (el usuario no eligió
+    /// ninguna al crearla), se usa aquí la miniatura que ya se generó al
+    /// importar el archivo (la propia primera página del cómic) como portada
+    /// por defecto. Sin esto, una serie con un solo número enlazado se veía en
+    /// «Mi colección» como un cuadro genérico sin portada seguido de la fila
+    /// del número con su carátula real justo debajo, dando la sensación de
+    /// que había dos cómics en vez de uno.
+    ///
+    /// Se copia el archivo en vez de reutilizar el mismo nombre: la portada
+    /// de la serie y la miniatura del archivo tienen ciclos de vida
+    /// independientes (desvincular el archivo, o borrarlo, no debe dejar a la
+    /// serie sin portada; y borrar la serie no debe tocar la miniatura del
+    /// archivo importado).
     func link(_ file: LocalComicFile, to issue: Issue) throws {
         file.issue = issue
+        if let series = issue.series,
+           series.coverImageFilename == nil,
+           let thumbnailFilename = file.thumbnailFilename,
+           let copied = try? ThumbnailStore.copy(thumbnailFilename) {
+            series.coverImageFilename = copied
+        }
         try context.save()
     }
 

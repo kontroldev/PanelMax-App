@@ -1,5 +1,32 @@
 import Testing
+import UIKit
 @testable import PanelMax
+
+@Suite("Selección del modo del lector")
+@MainActor
+struct ReaderLayoutPolicyTests {
+
+    @Test("Un iPhone horizontal conserva una sola página aunque supere 700 puntos")
+    func landscapePhoneStaysSinglePage() {
+        let size = CGSize(width: 852, height: 393)
+
+        #expect(!ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: .phone))
+    }
+
+    @Test("Un iPad horizontal ancho admite doble página")
+    func landscapePadUsesDoublePage() {
+        let size = CGSize(width: 1_024, height: 768)
+
+        #expect(ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: .pad))
+    }
+
+    @Test("Un iPad en una ventana estrecha conserva una sola página")
+    func narrowPadStaysSinglePage() {
+        let size = CGSize(width: 650, height: 500)
+
+        #expect(!ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: .pad))
+    }
+}
 
 @Suite("Pliegos del lector")
 @MainActor

@@ -33,7 +33,7 @@ struct LinkFileView: View {
                             link(file)
                         } label: {
                             HStack(spacing: 12) {
-                                LocalCoverImage(url: file.thumbnailURL, cornerRadius: 4).frame(width: 34)
+                                LocalCoverImage(url: file.thumbnailURL, width: 34, cornerRadius: 4)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(file.displayName).font(.subheadline)
                                     Text(ByteCountFormatter.string(fromByteCount: file.fileSize, countStyle: .file))

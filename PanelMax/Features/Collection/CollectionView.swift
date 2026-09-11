@@ -123,8 +123,7 @@ struct CollectionView: View {
     /// render, justo lo que el snapshot existe para evitar.
     private func header(for group: CollectionSnapshot.Group) -> some View {
         HStack {
-            LocalCoverImage(url: group.series.coverImageURL, cornerRadius: 4)
-                .frame(width: 28)
+            LocalCoverImage(url: group.series.coverImageURL, width: 28, cornerRadius: 4)
                 .accessibilityHidden(true) // decorativa: el título ya se anuncia
 
             Text(group.series.displayTitle)
@@ -154,8 +153,7 @@ struct CollectionView: View {
 
     private func row(for issue: Issue) -> some View {
         HStack(spacing: 12) {
-            LocalCoverImage(url: issue.file?.thumbnailURL, cornerRadius: 4)
-                .frame(width: 38)
+            LocalCoverImage(url: issue.file?.thumbnailURL, width: 38, cornerRadius: 4)
                 .accessibilityHidden(true) // decorativa: el número ya se anuncia
 
             VStack(alignment: .leading, spacing: 2) {

@@ -56,6 +56,18 @@ enum ThumbnailStore {
         return filename
     }
 
+    /// Duplica una portada ya guardada bajo un nombre nuevo.
+    ///
+    /// Usado para que una serie pueda quedarse con su propia copia de la
+    /// miniatura de un cómic (ver `CollectionStore.link`) sin compartir
+    /// archivo con ella: cada una se borra por su lado sin afectar a la otra.
+    @discardableResult
+    nonisolated static func copy(_ filename: String) throws -> String {
+        let sourceURL = try LocalComicFile.coverStorageURL(for: filename)
+        let data = try Data(contentsOf: sourceURL)
+        return try save(data)
+    }
+
     /// Borrado silencioso: una miniatura huérfana ocupa unos pocos KB y no
     /// merece interrumpir el flujo de borrado del cómic al que pertenecía.
     nonisolated static func delete(_ filename: String?) {

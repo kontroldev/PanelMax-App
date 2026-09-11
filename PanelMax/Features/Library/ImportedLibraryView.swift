@@ -168,8 +168,7 @@ private struct ImportedComicRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            LocalCoverImage(url: file.thumbnailURL, cornerRadius: 6)
-                .frame(width: 40)
+            LocalCoverImage(url: file.thumbnailURL, width: 40, cornerRadius: 6)
                 .accessibilityHidden(true) // decorativa: el nombre ya se anuncia
 
             VStack(alignment: .leading, spacing: 4) {

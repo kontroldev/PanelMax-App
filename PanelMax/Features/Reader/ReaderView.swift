@@ -57,8 +57,16 @@ struct ReaderView: View {
     /// puede darle a la app una columna estrecha, y ahí dos páginas juntas se
     /// verían minúsculas. Medir el ancho disponible cubre los dos casos con
     /// una sola regla.
+    ///
+    /// Restringido a iPad a propósito: muchos iPhone en horizontal ya superan
+    /// los 700 puntos de ancho (p. ej. un iPhone normal en landscape ronda los
+    /// 850), así que sin este filtro el lector pasaba a doble página en CUALQUIER
+    /// iPhone tumbado, partiendo el cómic en dos mitades diminutas y sin avisar.
+    /// Eso es justo lo que reportaron como «no se adapta a la pantalla»: no es
+    /// que el cómic no encajara, es que se estaba mostrando en un modo pensado
+    /// para una pantalla mucho más ancha que la de un teléfono.
     private func fitsDoublePage(in size: CGSize) -> Bool {
-        size.width > size.height && size.width >= 700
+        ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: UIDevice.current.userInterfaceIdiom)
     }
 
     /// Si de hecho se están enseñando dos páginas ahora mismo.
@@ -336,6 +344,15 @@ struct ReaderView: View {
     }
 }
 
+/// Decide si el dispositivo y el ancho disponible admiten dos páginas.
+/// Separar esta regla del estado de la vista permite cubrir con pruebas la
+/// regresión de iPhone horizontal sin depender de un modelo concreto.
+enum ReaderLayoutPolicy {
+    nonisolated static func fitsDoublePage(in size: CGSize, idiom: UIUserInterfaceIdiom) -> Bool {
+        idiom == .pad && size.width > size.height && size.width >= 700
+    }
+}
+
 // MARK: - Caché del pliego
 
 /// Memoiza el último `SpreadLayout` calculado, con su clave `(pageCount,
@@ -423,7 +440,14 @@ private struct SpreadView: View {
                             y: offset.height + drag.height)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
-                    .gesture(magnification(in: geometry.size))
+                    // `.simultaneousGesture`, no `.gesture`: dentro de un
+                    // `TabView(.page)` el gesto de paso de página es del propio
+                    // `TabView`, y un `.gesture` normal puede perder la pugna por
+                    // el toque contra él en un iPhone (pantalla más estrecha, el
+                    // giro de página es más sensible). `.simultaneousGesture`
+                    // deja que el pellizco se reconozca A LA VEZ, así que el zoom
+                    // funciona también en iPhone, no solo en iPad.
+                    .simultaneousGesture(magnification(in: geometry.size))
                     // Solo se roba el arrastre al TabView cuando hay zoom;
                     // sin ampliar, deslizar sigue pasando de página.
                     .highPriorityGesture(pan(in: geometry.size), including: zoom > 1 ? .all : .subviews)

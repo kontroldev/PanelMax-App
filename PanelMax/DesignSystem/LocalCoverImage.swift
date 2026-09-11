@@ -12,7 +12,25 @@ import SwiftUI
 /// fila que ya se había visto.
 struct LocalCoverImage: View {
     let url: URL?
+
+    /// Ancho fijo de la portada. El alto se deriva de él con la proporción
+    /// 2:3 estándar de un cómic, así que el tamaño final queda determinado
+    /// por completo por este único número.
+    ///
+    /// A propósito NO se deja que el tamaño salga de combinar un
+    /// `.aspectRatio(_, contentMode: .fit)` interno con un `.frame(width:)`
+    /// puesto por fuera, como tenía antes: esa combinación depende de qué
+    /// alto le proponga el contenedor (una fila de `Form`, un `HStack`...), y
+    /// con una foto del carrete de proporción muy distinta a 2:3 — un
+    /// panorámico ancho y bajo, por ejemplo — ese alto propuesto podía acabar
+    /// siendo mayor de lo esperado, así que la portada salía más grande que
+    /// su caja y se montaba sobre los botones de al lado. Fijar aquí dentro
+    /// las dos dimensiones (`width` Y `height`) hace que la portada mida
+    /// siempre lo mismo pase lo que pase alrededor, sea cual sea la foto.
+    var width: CGFloat
     var cornerRadius: CGFloat = 8
+
+    private var height: CGFloat { width * 3 / 2 }
 
     var body: some View {
         ZStack {
@@ -30,7 +48,7 @@ struct LocalCoverImage: View {
                     }
             }
         }
-        .aspectRatio(2 / 3, contentMode: .fit) // proporción estándar de portada de cómic
+        .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

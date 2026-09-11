@@ -127,7 +127,7 @@ struct HomeView: View {
                             NavigationLink {
                                 ReaderView(file: file)
                             } label: {
-                                ReadingCard(file: file)
+                                ReadingCard(file: file, coverWidth: cardWidth)
                                     .frame(width: cardWidth)
                             }
                             .buttonStyle(.plain)
@@ -154,7 +154,7 @@ struct HomeView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     ZStack(alignment: .topTrailing) {
-                                        LocalCoverImage(url: nil)
+                                        LocalCoverImage(url: nil, width: cardWidth)
                                             .accessibilityHidden(true)
                                         Text("FALTA")
                                             .font(.caption2.weight(.bold))
@@ -189,11 +189,12 @@ struct HomeView: View {
 /// vinculado a un número catalogado.
 private struct ReadingCard: View {
     let file: LocalComicFile
+    let coverWidth: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .bottom) {
-                LocalCoverImage(url: file.thumbnailURL)
+                LocalCoverImage(url: file.thumbnailURL, width: coverWidth)
 
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {

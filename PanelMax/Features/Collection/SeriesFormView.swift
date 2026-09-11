@@ -59,8 +59,7 @@ struct SeriesFormView: View {
             Form {
                 Section("Portada (opcional)") {
                     HStack(spacing: 12) {
-                        LocalCoverImage(url: coverImageURL, cornerRadius: 6)
-                            .frame(width: 64)
+                        LocalCoverImage(url: coverImageURL, width: 64, cornerRadius: 6)
                             .accessibilityHidden(true) // decorativa: los botones de al lado ya explican el estado
 
                         VStack(alignment: .leading, spacing: 8) {

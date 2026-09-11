@@ -131,6 +131,23 @@ red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
 
+### Beta — 11 de septiembre de 2026 (11/09/2026)
+
+**Errores corregidos**
+
+- **Lector horizontal en iPhone:** el modo de doble página queda reservado
+  al iPad. En un iPhone girado se mantiene una sola página ajustada a la
+  pantalla y el zoom por pellizco funciona con normalidad.
+- **Portada automática al vincular un cómic:** si la serie no tiene una
+  portada elegida manualmente, al vincular un archivo importado a uno de sus
+  números se usa una copia de la miniatura generada desde la primera página
+  del cómic como portada de la serie. Así la colección deja de dar la
+  impresión de mostrar dos cómics distintos.
+- **Imágenes de la Fototeca dentro de sus márgenes:** las portadas elegidas
+  desde el carrete tienen ahora un marco de proporción fija y se recortan
+  dentro de él, incluso cuando la imagen es panorámica o presenta unas
+  proporciones poco habituales, sin invadir botones ni otros elementos.
+
 ### En desarrollo — 7 de septiembre de 2026
 
 Trabajo de la sesión de hoy, pendiente de subir a App Store junto a una
