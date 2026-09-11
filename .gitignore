@@ -12,3 +12,6 @@ build/
 .env
 .env.*
 *.xcconfig.local
+
+# Notas de trabajo con Claude (no debe subirse al repo)
+CLAUDE.md

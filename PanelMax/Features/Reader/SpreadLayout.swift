@@ -44,6 +44,17 @@ struct SpreadLayout: Equatable {
 
     let spreads: [Spread]
 
+    /// Si `spreads` sigue el patrón "portada sola + parejas" o es una página
+    /// por pliego. Se guarda aparte del parámetro de entrada `isDouble`
+    /// porque con una sola página el resultado es siempre uno por pliego,
+    /// pase lo que pase `isDouble` — y `spreadIndex`/`firstPage` necesitan
+    /// saber cuál de las dos formas es la real para poder calcular con una
+    /// fórmula en vez de recorrer el array entero. Cambiar de página es la
+    /// interacción más repetida del lector: no debería costar tiempo
+    /// proporcional al total de páginas del cómic (un recopilatorio puede
+    /// tener varios cientos).
+    private let isPaired: Bool
+
     var count: Int { spreads.count }
     var isEmpty: Bool { spreads.isEmpty }
 
@@ -54,11 +65,13 @@ struct SpreadLayout: Equatable {
     init(pageCount: Int, isDouble: Bool) {
         guard pageCount > 0 else {
             spreads = []
+            isPaired = false
             return
         }
 
         guard isDouble, pageCount > 1 else {
             spreads = (0..<pageCount).map { .single($0) }
+            isPaired = false
             return
         }
 
@@ -74,16 +87,26 @@ struct SpreadLayout: Equatable {
             }
         }
         spreads = result
+        isPaired = true
     }
 
     /// Índice del pliego que contiene una página.
     ///
     /// Es lo que permite conservar la posición al girar el iPad: la página
     /// leída no cambia, solo cambia el pliego en el que aparece.
+    ///
+    /// Se calcula con una fórmula, no recorriendo `spreads`: el patrón de
+    /// emparejado es regular (portada sola, luego parejas consecutivas), así
+    /// que la posición se deriva directamente de la página en O(1) en vez de
+    /// buscarla, que sería O(número de pliegos).
     func spreadIndex(containing page: Int) -> Int {
         guard !spreads.isEmpty else { return 0 }
         let clamped = min(max(page, 0), (spreads.last?.pages.last ?? 0))
-        return spreads.firstIndex { $0.contains(clamped) } ?? 0
+
+        let rawIndex = isPaired
+            ? (clamped == 0 ? 0 : 1 + (clamped - 1) / 2)
+            : clamped
+        return min(max(rawIndex, 0), spreads.count - 1)
     }
 
     /// Primera página de un pliego, acotada a un índice válido.

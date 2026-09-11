@@ -131,6 +131,85 @@ red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
 
+### Beta — 11 de septiembre de 2026 (11/09/2026)
+
+**Errores corregidos**
+
+- **Lector horizontal en iPhone:** el modo de doble página queda reservado
+  al iPad. En un iPhone girado se mantiene una sola página ajustada a la
+  pantalla y el zoom por pellizco funciona con normalidad.
+- **Portada automática al vincular un cómic:** si la serie no tiene una
+  portada elegida manualmente, al vincular un archivo importado a uno de sus
+  números se usa una copia de la miniatura generada desde la primera página
+  del cómic como portada de la serie. Así la colección deja de dar la
+  impresión de mostrar dos cómics distintos.
+- **Imágenes de la Fototeca dentro de sus márgenes:** las portadas elegidas
+  desde el carrete tienen ahora un marco de proporción fija y se recortan
+  dentro de él, incluso cuando la imagen es panorámica o presenta unas
+  proporciones poco habituales, sin invadir botones ni otros elementos.
+
+### En desarrollo — 7 de septiembre de 2026
+
+Trabajo de la sesión de hoy, pendiente de subir a App Store junto a una
+próxima versión.
+
+**Añadido**
+
+- Portada de colección: al crear o editar una serie se puede elegir una
+  imagen de portada desde la Fototeca, guardada localmente en
+  `Documents/Covers` igual que las miniaturas de cómics — sin red ni
+  catálogo remoto. Cubre los casos límite de cancelar el formulario tras
+  elegir imagen, reemplazar la portada más de una vez antes de guardar,
+  un guardado fallido y el borrado de la serie.
+
+**Explorado y revertido**
+
+- Sincronización con iCloud (SwiftData + CloudKit privado, sin servidor
+  propio, tras un interruptor apagado por defecto). Decisión: la versión
+  1.0 se queda completamente local; sincronización y suscripción se
+  retoman en la 2.0.
+
+**Rendimiento**
+
+- Peso de portadas calculado por bytes decodificados en vez de por
+  cantidad de archivos.
+- Posición del pliego en el lector de iPad: de recorrer el array entero a
+  una fórmula directa (`O(n) → O(1)`), y el pliego se memoiza en vez de
+  reconstruirse en cada render.
+- Alta de números por rango: de `O(n²)` a `O(n)` con un índice. Con un
+  alta de hasta 2.000 números de golpe, sin el índice suponía cerca de
+  dos millones de comparaciones en vez de dos mil.
+- Ficha de serie: `progressLine` pasó de tres pasadas de filtrado a dos, y
+  `numbersGrid` de un orden duplicado a uno.
+- Biblioteca importada: filtrado duplicado de `visibleFiles` reducido a
+  una sola pasada.
+
+**Arquitectura**
+
+- Modularización pragmática: sin ViewModels ni protocolos de repositorio,
+  SwiftData sigue siendo la capa de persistencia directa tal y como
+  estaba. Cambia dónde vive cada cosa: `Domain/` para las reglas de
+  negocio, `Infrastructure/` para la E/S de bajo nivel, separadas de
+  `Features/`.
+- `CollectionStore`, `CollectionExporter` y `ComicNumber` movidos a
+  `Domain/` (antes en `Support/`).
+- `Domain/CollectionSnapshot` centraliza las métricas que usan todas las
+  vistas; `HomeSnapshot` era `private` y no se podía probar de forma
+  aislada.
+- Nuevo `Domain/LibraryStore.swift`: saca de la vista la importación y el
+  borrado con papelera reversible.
+- Nuevo `Infrastructure/`: `ThumbnailGenerator`, `ComicImportBatch` y
+  `PendingComicDeletion`.
+- Siete vistas unificadas a una única forma de pedir `CollectionStore`;
+  antes había 11 instancias sueltas.
+- `ImportedLibraryView.swift`: 580 → 229 líneas. Contenía, además de la
+  vista, toda la lógica de copia atómica y borrado reversible, que no era
+  alcanzable por ningún test. Se añadieron 4 tests nuevos para
+  `HomeSnapshot` como muestra de lo que ahora se puede probar.
+
+Balance de la sesión: 6 archivos nuevos, 4 movidos, 13 editados, 61 tests
+en verde.
+
 ### 1.0 — 30 de agosto de 2026
 
 Reescritura para publicar sin depender de infraestructura externa. Sin
@@ -202,8 +281,10 @@ versiones para quien retome ese trabajo en una versión futura.
 - [ ] Sustituir las capturas por otras de la versión 1.0 (sin catálogo).
 - [ ] Capturas de iPad de 13" para App Store Connect: obligatorias en cuanto
   el dispositivo está activado, no opcionales.
-- [ ] Comprobar desde un dispositivo real los tres enlaces legales de Perfil.
+- [ ] Comprobar desde un dispositivo real los tres enlaces legales de Perfil
+  (dependen de que el repositorio de GitHub siga público).
 - [ ] Completar pruebas en dispositivo y localización.
+- [ ] Ampliar los UI Tests más allá del mínimo actual.
 - [ ] Responder el cuestionario de clasificación por edad en App Store Connect.
 - [ ] Declarar no-trader en la Digital Services Act (sin compras integradas).
 - [ ] Confirmar que el Bundle Identifier (`com.kontroldesignstudio.vine`)

@@ -33,6 +33,14 @@ struct ReaderView: View {
     @State private var isScrubbing = false
     @State private var scrubPage: Double = 0
 
+    private var store: CollectionStore { CollectionStore(context: context) }
+
+    /// Memoiza el pliego calculado. Sin esto, `layout(for:)` reconstruía un
+    /// array del tamaño del cómic entero en CADA evaluación de `body`: cada
+    /// cambio de página, cada toque para mostrar u ocultar los mandos, cada
+    /// punto del arrastre del deslizador. Ver `SpreadLayoutCache` más abajo.
+    @State private var layoutCache = SpreadLayoutCache()
+
     private var totalPages: Int { archive?.pageCount ?? 0 }
 
     /// Página mostrada en la cabecera: la del arrastre en curso si se está
@@ -49,8 +57,16 @@ struct ReaderView: View {
     /// puede darle a la app una columna estrecha, y ahí dos páginas juntas se
     /// verían minúsculas. Medir el ancho disponible cubre los dos casos con
     /// una sola regla.
+    ///
+    /// Restringido a iPad a propósito: muchos iPhone en horizontal ya superan
+    /// los 700 puntos de ancho (p. ej. un iPhone normal en landscape ronda los
+    /// 850), así que sin este filtro el lector pasaba a doble página en CUALQUIER
+    /// iPhone tumbado, partiendo el cómic en dos mitades diminutas y sin avisar.
+    /// Eso es justo lo que reportaron como «no se adapta a la pantalla»: no es
+    /// que el cómic no encajara, es que se estaba mostrando en un modo pensado
+    /// para una pantalla mucho más ancha que la de un teléfono.
     private func fitsDoublePage(in size: CGSize) -> Bool {
-        size.width > size.height && size.width >= 700
+        ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: UIDevice.current.userInterfaceIdiom)
     }
 
     /// Si de hecho se están enseñando dos páginas ahora mismo.
@@ -59,7 +75,7 @@ struct ReaderView: View {
     }
 
     private func layout(for size: CGSize) -> SpreadLayout {
-        SpreadLayout(pageCount: totalPages, isDouble: usesDoublePage(in: size))
+        layoutCache.layout(pageCount: totalPages, isDouble: usesDoublePage(in: size))
     }
 
     /// Selección del `TabView` en pliegos, derivada de la página actual.
@@ -315,8 +331,7 @@ struct ReaderView: View {
             if let issue {
                 // `saveProgress` guarda todo el contexto, incluido el progreso
                 // propio del archivo actualizado justo arriba.
-                try CollectionStore(context: context)
-                    .saveProgress(for: issue, page: currentPage, totalPages: totalPages)
+                try store.saveProgress(for: issue, page: currentPage, totalPages: totalPages)
             } else {
                 try context.save()
             }
@@ -326,6 +341,41 @@ struct ReaderView: View {
             if reportErrors { progressError = error.localizedDescription }
             return false
         }
+    }
+}
+
+/// Decide si el dispositivo y el ancho disponible admiten dos páginas.
+/// Separar esta regla del estado de la vista permite cubrir con pruebas la
+/// regresión de iPhone horizontal sin depender de un modelo concreto.
+enum ReaderLayoutPolicy {
+    nonisolated static func fitsDoublePage(in size: CGSize, idiom: UIUserInterfaceIdiom) -> Bool {
+        idiom == .pad && size.width > size.height && size.width >= 700
+    }
+}
+
+// MARK: - Caché del pliego
+
+/// Memoiza el último `SpreadLayout` calculado, con su clave `(pageCount,
+/// isDouble)`. Guardada en `@State` solo para conservar la MISMA instancia
+/// entre evaluaciones de `body` — no para que SwiftUI observe sus mutaciones:
+/// es una clase normal, no `@Observable`, así que mutarla dentro de `body` es
+/// seguro y no invalida la vista por sí sola.
+///
+/// `SpreadLayout(pageCount:isDouble:)` es O(páginas): sin esta caché se
+/// reconstruía en cada cambio de página, cada toque para mostrar los mandos
+/// y cada punto del arrastre del deslizador, aunque ni el número de páginas
+/// ni el modo doble hubieran cambiado.
+private final class SpreadLayoutCache {
+    private var pageCount = -1
+    private var isDouble = false
+    private var cached = SpreadLayout(pageCount: 0, isDouble: false)
+
+    func layout(pageCount: Int, isDouble: Bool) -> SpreadLayout {
+        guard pageCount != self.pageCount || isDouble != self.isDouble else { return cached }
+        self.pageCount = pageCount
+        self.isDouble = isDouble
+        cached = SpreadLayout(pageCount: pageCount, isDouble: isDouble)
+        return cached
     }
 }
 
@@ -390,7 +440,14 @@ private struct SpreadView: View {
                             y: offset.height + drag.height)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
-                    .gesture(magnification(in: geometry.size))
+                    // `.simultaneousGesture`, no `.gesture`: dentro de un
+                    // `TabView(.page)` el gesto de paso de página es del propio
+                    // `TabView`, y un `.gesture` normal puede perder la pugna por
+                    // el toque contra él en un iPhone (pantalla más estrecha, el
+                    // giro de página es más sensible). `.simultaneousGesture`
+                    // deja que el pellizco se reconozca A LA VEZ, así que el zoom
+                    // funciona también en iPhone, no solo en iPad.
+                    .simultaneousGesture(magnification(in: geometry.size))
                     // Solo se roba el arrastre al TabView cuando hay zoom;
                     // sin ampliar, deslizar sigue pasando de página.
                     .highPriorityGesture(pan(in: geometry.size), including: zoom > 1 ? .all : .subviews)

@@ -33,6 +33,8 @@ struct SeriesDetailView: View {
         [GridItem(.adaptive(minimum: chipMinimumWidth, maximum: 110), spacing: 10)]
     }
 
+    private var store: CollectionStore { CollectionStore(context: context) }
+
     private var sortedIssues: [Issue] {
         ComicNumber.sorted(series.issues ?? [], by: \.number)
     }
@@ -104,13 +106,18 @@ struct SeriesDetailView: View {
     // MARK: - Secciones
 
     private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(series.title).font(.title3.weight(.bold))
-            if !series.publisher.isEmpty {
-                Text(series.publisher).font(.subheadline).foregroundStyle(Theme.secondaryText)
-            }
-            if let year = series.startYear {
-                Text(String(year)).font(.caption).foregroundStyle(Theme.secondaryText)
+        HStack(alignment: .top, spacing: 12) {
+            LocalCoverImage(url: series.coverImageURL, width: 64, cornerRadius: 8)
+                .accessibilityHidden(true) // decorativa: el título ya se anuncia
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(series.title).font(.title3.weight(.bold))
+                if !series.publisher.isEmpty {
+                    Text(series.publisher).font(.subheadline).foregroundStyle(Theme.secondaryText)
+                }
+                if let year = series.startYear {
+                    Text(String(year)).font(.caption).foregroundStyle(Theme.secondaryText)
+                }
             }
         }
     }
@@ -118,11 +125,18 @@ struct SeriesDetailView: View {
     @ViewBuilder
     private var progressLine: some View {
         if let completion = series.completion {
+            // `series.allOwnedIssues` no se cachea (a propósito: es lógica de
+            // modelo simple y ya muy probada, ver `CollectionMathTests`), así
+            // que cada acceso vuelve a filtrar `series.issues` entero. Antes
+            // se leía aquí Y en el texto de abajo — dos pasadas donde basta
+            // una — igual que ya se corrigió en `CollectionView` (ver
+            // `CollectionSnapshot`, mismo motivo).
+            let owned = series.allOwnedIssues
             let missing = series.missingNumbers
             VStack(alignment: .leading, spacing: 5) {
                 Theme.sectionLabel("Tu progreso")
                 ProgressView(value: completion).tint(Theme.accent)
-                Text("\(series.allOwnedIssues.count) de \(series.totalIssues) números")
+                Text("\(owned.count) de \(series.totalIssues) números")
                     .font(.caption2)
                     .foregroundStyle(Theme.secondaryText)
                 if !missing.isEmpty {
@@ -136,7 +150,12 @@ struct SeriesDetailView: View {
     }
 
     private var numbersGrid: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // Se calcula UNA vez: `sortedIssues` ordena `series.issues` entero
+        // (ver `ComicNumber.sorted`), y antes se leía dos veces por render
+        // (`.isEmpty` y el `ForEach`), así que el orden se recalculaba dos
+        // veces para pintar exactamente lo mismo.
+        let issues = sortedIssues
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Theme.sectionLabel("Números")
                 Spacer()
@@ -148,7 +167,7 @@ struct SeriesDetailView: View {
                 }
             }
 
-            if sortedIssues.isEmpty {
+            if issues.isEmpty {
                 ContentUnavailableView {
                     Label("Todavía no hay números", systemImage: "books.vertical")
                 } description: {
@@ -158,7 +177,7 @@ struct SeriesDetailView: View {
                 }
             } else {
                 LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(sortedIssues) { issue in
+                    ForEach(issues) { issue in
                         NumberChip(issue: issue)
                             .contextMenu { menu(for: issue) }
                     }
@@ -173,7 +192,7 @@ struct SeriesDetailView: View {
     private func menu(for issue: Issue) -> some View {
         ForEach(CollectionState.allCases) { state in
             Button {
-                write { try CollectionStore(context: context).setState(state, for: issue) }
+                write { try store.setState(state, for: issue) }
             } label: {
                 Label(state.label, systemImage: state.systemImage)
             }
@@ -184,7 +203,7 @@ struct SeriesDetailView: View {
 
         ForEach(CollectionFormat.allCases) { format in
             Button {
-                write { try CollectionStore(context: context).setFormat(format, for: issue) }
+                write { try store.setFormat(format, for: issue) }
             } label: {
                 Label(format.label, systemImage: format == .physical ? "book.closed" : "iphone")
             }
@@ -200,7 +219,7 @@ struct SeriesDetailView: View {
                 Label("Leer", systemImage: "book.fill")
             }
             Button {
-                write { try CollectionStore(context: context).unlink(file) }
+                write { try store.unlink(file) }
             } label: {
                 Label("Desvincular archivo", systemImage: "link.badge.minus")
             }
@@ -215,7 +234,7 @@ struct SeriesDetailView: View {
         Divider()
 
         Button(role: .destructive) {
-            write { try CollectionStore(context: context).remove(issue) }
+            write { try store.remove(issue) }
         } label: {
             Label("Quitar de la colección", systemImage: "trash")
         }
@@ -224,8 +243,12 @@ struct SeriesDetailView: View {
     // MARK: - Acciones
 
     private func deleteSeries() {
+        // Se lee antes de borrar: una vez borrado el modelo, `series` ya no
+        // es válido para leer sus propiedades.
+        let coverToRemove = series.coverImageFilename
         do {
-            try CollectionStore(context: context).deleteSeries(series)
+            try store.deleteSeries(series)
+            ThumbnailStore.delete(coverToRemove)
             dismiss()
         } catch {
             context.rollback()

@@ -20,6 +20,8 @@ struct AddIssuesView: View {
     @State private var format: CollectionFormat = .physical
     @State private var errorMessage: String?
 
+    private var store: CollectionStore { CollectionStore(context: context) }
+
     enum Mode: String, CaseIterable, Identifiable {
         case range = "Rango"
         case single = "Número suelto"
@@ -107,7 +109,6 @@ struct AddIssuesView: View {
 
     private func add() {
         do {
-            let store = CollectionStore(context: context)
             switch mode {
             case .range:
                 guard let start = Int(rangeStartText), let end = Int(rangeEndText) else { return }

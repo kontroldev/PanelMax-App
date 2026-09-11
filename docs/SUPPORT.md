@@ -1,4 +1,4 @@
-# Soporte de PanelMax
+# Soporte de Viñe
 
 Para informar de un error o solicitar ayuda, abre una incidencia en
 [GitHub Issues](https://github.com/kontroldev/PanelMax-App/issues) o escribe
@@ -6,7 +6,7 @@ a [raulgallego79@icloud.com](mailto:raulgallego79@icloud.com).
 
 Incluye, cuando sea posible:
 
-- versión de PanelMax y de iOS;
+- versión de Viñe y de iOS;
 - modelo del dispositivo;
 - pasos para reproducir el problema;
 - mensaje de error visible.
@@ -24,7 +24,7 @@ estar disponible.
 
 ### He borrado la app y he perdido mi colección
 
-PanelMax funciona sin conexión ni cuenta, así que la colección solo vive en
+Viñe funciona sin conexión ni cuenta, así que la colección solo vive en
 el dispositivo. Usa "Exportar colección" desde Perfil de vez en cuando para
 tener una copia con la que reconstruirla si cambias de dispositivo.
 

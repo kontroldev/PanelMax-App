@@ -23,7 +23,16 @@ final class Series {
 
     /// URL de la portada representativa. Se guarda como String para evitar
     /// problemas de codificación al sincronizar con CloudKit.
+    ///
+    /// Resto del diseño con catálogo remoto: ninguna vista lo lee hoy. En
+    /// v1.0, sin red, la portada real es `coverImageFilename`.
     var coverURLString: String?
+
+    /// Nombre del archivo de portada que el usuario ha elegido a mano desde
+    /// la Fototeca, guardado en `Documents/Covers` (mismo sitio y mismas
+    /// reglas de nombre seguro que usa `LocalComicFile.thumbnailFilename`).
+    /// `nil` si no ha elegido ninguna: la portada es opcional.
+    var coverImageFilename: String?
 
     /// Número total de ejemplares publicados, según el catálogo.
     /// Es lo que permite calcular los huecos de la colección.
@@ -45,6 +54,7 @@ final class Series {
          startYear: Int? = nil,
          summary: String = "",
          coverURLString: String? = nil,
+         coverImageFilename: String? = nil,
          totalIssues: Int = 0) {
         self.catalogID = catalogID
         self.title = title
@@ -52,6 +62,7 @@ final class Series {
         self.startYear = startYear
         self.summary = summary
         self.coverURLString = coverURLString
+        self.coverImageFilename = coverImageFilename
         self.totalIssues = totalIssues
         self.dateAdded = Date()
     }
@@ -61,6 +72,15 @@ final class Series {
     var coverURL: URL? {
         guard let coverURLString else { return nil }
         return URL(string: coverURLString)
+    }
+
+    /// URL local de la portada elegida a mano, si el nombre de archivo
+    /// guardado sigue siendo válido. Nunca lanza: igual que
+    /// `LocalComicFile.thumbnailURL`, una portada es una mejora visual, no
+    /// algo que deba interrumpir el resto de la pantalla si falla.
+    var coverImageURL: URL? {
+        guard let coverImageFilename else { return nil }
+        return try? LocalComicFile.coverStorageURL(for: coverImageFilename)
     }
 
     /// Título con el año, como se muestra en la lista: "Cuervo Negro (2021)".
@@ -94,11 +114,32 @@ final class Series {
         }
     }
 
+    /// Amplitud máxima que se rastrea en busca de huecos.
+    ///
+    /// Ninguna colección real llega aquí: Action Comics, de las series más
+    /// largas que existen, ronda los 1.100 números. El techo protege del caso
+    /// patológico. El alta por rango ya limita a 2.000 números de golpe, pero
+    /// el alta suelta es un campo de texto libre: quien teclee «99999» en vez
+    /// de «99» dejaría a `missingNumbers` construyendo un array de cien mil
+    /// elementos, y `CollectionView` lo pide dos veces por serie y por render.
+    static let maximumGapSpan = 5_000
+
+    /// Números poseídos como conjunto.
+    ///
+    /// No reutiliza `ownedNumbers` a propósito: allí se paga un `sorted()`
+    /// que aquí se tira, porque buscar huecos solo necesita pertenencia.
+    private var ownedNumbersSet: Set<Int> {
+        Set(allOwnedIssues.compactMap { Int($0.number) })
+    }
+
     /// Los huecos de la colección: qué números faltan entre el primero y el último que tienes.
     /// Esta es la función que engancha al coleccionista, así que merece estar bien probada.
     var missingNumbers: [Int] {
-        let owned = Set(ownedNumbers)
+        let owned = ownedNumbersSet
         guard let first = owned.min(), let last = owned.max(), first < last else { return [] }
+        // Amplitud imposible en una colección real: casi con seguridad es un
+        // número mal tecleado. Se prefiere no enseñar huecos a congelar la lista.
+        guard last - first <= Self.maximumGapSpan else { return [] }
         return (first...last).filter { !owned.contains($0) }
     }
 

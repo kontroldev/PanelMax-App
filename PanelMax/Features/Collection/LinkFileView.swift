@@ -16,6 +16,8 @@ struct LinkFileView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var errorMessage: String?
 
+    private var store: CollectionStore { CollectionStore(context: context) }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -31,7 +33,7 @@ struct LinkFileView: View {
                             link(file)
                         } label: {
                             HStack(spacing: 12) {
-                                LocalCoverImage(url: file.thumbnailURL, cornerRadius: 4).frame(width: 34)
+                                LocalCoverImage(url: file.thumbnailURL, width: 34, cornerRadius: 4)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(file.displayName).font(.subheadline)
                                     Text(ByteCountFormatter.string(fromByteCount: file.fileSize, countStyle: .file))
@@ -69,7 +71,7 @@ struct LinkFileView: View {
 
     private func link(_ file: LocalComicFile) {
         do {
-            try CollectionStore(context: context).link(file, to: issue)
+            try store.link(file, to: issue)
             dismiss()
         } catch {
             context.rollback()

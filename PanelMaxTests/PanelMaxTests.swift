@@ -67,8 +67,10 @@ struct CollectionStoreTests {
         _ = try store.addIssue(number: "1", to: series, state: .read)
 
         #expect(series.issues?.count == 1)
-        #expect(series.issues?.first?.entry?.state == .read)
-    }
+        // El segundo alta no duplica NI pisa el estado ya guardado: cambiarlo
+        // es trabajo de `setState`, no del alta. Mismo contrato que el alta
+        // por rango (ver `addIssueRangeSkipsExisting`).
+        #expect(series.issues?.first?.entry?.state == .owned)    }
 
     @Test("Un rango añade todos los números y respeta lo que ya existía")
     func addIssueRangeSkipsExisting() throws {
@@ -115,6 +117,52 @@ struct CollectionStoreTests {
         let remainingFiles = try store.context.fetch(FetchDescriptor<LocalComicFile>())
         #expect(remainingFiles.count == 1)
         #expect(remainingFiles.first?.issue == nil)
+    }
+
+    @Test("Vincular un cómic crea la portada de una serie que no la tenía")
+    func linkingComicCreatesSeriesCover() throws {
+        let container = try makeContainer()
+        let store = CollectionStore(context: ModelContext(container))
+        let series = try store.createSeries(title: "Serie")
+        let issue = try store.addIssue(number: "1", to: series)
+        let thumbnailData = Data([0x50, 0x41, 0x4E, 0x45, 0x4C])
+        let thumbnailFilename = try ThumbnailStore.save(thumbnailData)
+        var generatedCoverFilename: String?
+        defer {
+            ThumbnailStore.delete(thumbnailFilename)
+            ThumbnailStore.delete(generatedCoverFilename)
+        }
+
+        let file = LocalComicFile(displayName: "Cómic", localFilename: "a.cbz")
+        file.thumbnailFilename = thumbnailFilename
+        store.context.insert(file)
+
+        try store.link(file, to: issue)
+        generatedCoverFilename = series.coverImageFilename
+
+        #expect(file.issue === issue)
+        #expect(generatedCoverFilename != nil)
+        #expect(generatedCoverFilename != thumbnailFilename)
+        if let generatedCoverFilename {
+            let coverURL = try LocalComicFile.coverStorageURL(for: generatedCoverFilename)
+            #expect(try Data(contentsOf: coverURL) == thumbnailData)
+        }
+    }
+
+    @Test("Vincular un cómic conserva la portada elegida por el usuario")
+    func linkingComicPreservesManualCover() throws {
+        let container = try makeContainer()
+        let store = CollectionStore(context: ModelContext(container))
+        let series = try store.createSeries(title: "Serie", coverImageFilename: "manual.jpg")
+        let issue = try store.addIssue(number: "1", to: series)
+        let file = LocalComicFile(displayName: "Cómic", localFilename: "a.cbz")
+        file.thumbnailFilename = "comic.jpg"
+        store.context.insert(file)
+
+        try store.link(file, to: issue)
+
+        #expect(file.issue === issue)
+        #expect(series.coverImageFilename == "manual.jpg")
     }
 
     @Test("El progreso se limita al rango real")
