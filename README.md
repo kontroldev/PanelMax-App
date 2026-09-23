@@ -39,9 +39,9 @@ remoto, sin cuenta y sin compras.
 ## Capturas
 
 <p align="center">
-  <img src="docs/screenshots/inicio.png" width="280" alt="Pantalla de inicio de PanelMax">
+  <img src="docs/screenshots/inicio.png" width="280" alt="Pantalla de inicio de Viñe">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/coleccion.png" width="280" alt="Colección de cómics de PanelMax">
+  <img src="docs/screenshots/coleccion.png" width="280" alt="Colección de cómics de Viñe">
 </p>
 
 <p align="center">
@@ -54,7 +54,7 @@ remoto, sin cuenta y sin compras.
   mostraban el catálogo remoto, que ya no existe en esta versión.</sub>
 </p>
 
-PanelMax no distribuye cómics. Los archivos de lectura son seleccionados por
+Viñe no distribuye cómics. Los archivos de lectura son seleccionados por
 el usuario y se copian al contenedor privado de la app.
 
 No están implementados en esta versión el catálogo remoto, la suscripción,

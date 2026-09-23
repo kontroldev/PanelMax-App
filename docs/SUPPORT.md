@@ -30,4 +30,4 @@ tener una copia con la que reconstruirla si cambias de dispositivo.
 
 ## Compatibilidad
 
-La versión actual tiene como mínimo iOS 18 y está diseñada para iPhone.
+La versión actual tiene como mínimo iOS 18 y está diseñada para iPhone y iPad.
