@@ -1,0 +1,29 @@
+Viñe — Notas para probadores (qué probar en esta build)
+
+Se han corregido 3 fallos reportados en la beta:
+
+1. Lector en horizontal en iPhone
+   Antes el cómic pasaba a "doble página" (pensado para iPad) en cualquier
+   iPhone tumbado, mostrando dos mitades diminutas y sin permitir zoom.
+   Qué probar: abre un cómic, gira el iPhone a horizontal y comprueba que
+   se ve una sola página ajustada a la pantalla, y que el pellizco para
+   hacer zoom funciona con normalidad.
+
+2. Tarjeta "duplicada" al añadir un cómic
+   Al vincular un archivo importado a un número, la serie no tenía portada
+   propia y en "Mi colección" parecía que había dos cómics en vez de uno.
+   Ahora, si la serie no tiene portada elegida a mano, se usa automáticamente
+   la primera página del cómic vinculado como portada.
+   Qué probar: crea una serie sin portada, añade un número y vincúlale un
+   cómic importado. La cabecera de la serie debe mostrar ya esa carátula.
+
+3. Imagen del carrete que se sale de los márgenes
+   Al elegir una foto de proporciones distintas a las de una portada de
+   cómic (por ejemplo, muy ancha y baja) para la portada de una serie, la
+   imagen podía salirse de su recuadro y montarse sobre los botones.
+   Qué probar: en "Nueva serie" o "Editar serie", elige desde el carrete
+   una foto panorámica o de forma poco habitual como portada y comprueba
+   que queda recortada dentro de su recuadro, sin invadir el resto de la
+   pantalla.
+
+Gracias por probarlo.
