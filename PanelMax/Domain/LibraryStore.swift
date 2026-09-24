@@ -66,7 +66,7 @@ struct LibraryStore {
             try importContext.save()
         } catch {
             guard ComicImportBatch.rollback(drafts) else {
-                throw ComicImportError.cleanupFailed
+                throw ComicImportError.cleanupFailed(underlying: error)
             }
             throw ComicImportError.persistence(error.localizedDescription)
         }
