@@ -6,6 +6,8 @@ Aplicación iOS para catalogar una colección de cómics a mano y leer archivos
 propios en CBZ y PDF. Funciona por completo sin conexión: sin catálogo
 remoto, sin cuenta y sin compras.
 
+**Web oficial:** [vine.kontroldesignstudio.com](https://vine.kontroldesignstudio.com/)
+
 [![CI](https://github.com/kontroldev/PanelMax-App/actions/workflows/ci.yml/badge.svg)](https://github.com/kontroldev/PanelMax-App/actions/workflows/ci.yml)
 ![iOS](https://img.shields.io/badge/iOS-18%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-6.0-orange)
