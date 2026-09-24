@@ -539,10 +539,37 @@ private struct SpreadView: View {
         }
     }
 
+    /// Tamaño real de la imagen dentro del marco, teniendo en cuenta el
+    /// recorte de "Ajustar ancho" (`aspectRatio(.fill)`).
+    ///
+    /// En página completa la imagen siempre cabe entera dentro del marco y
+    /// coincide con `size`. En "Ajustar ancho", en cambio, la imagen YA
+    /// desborda el marco antes de aplicar ningún zoom (es lo que recorta los
+    /// márgenes). Si `clamped` calculara sus límites a partir de `size` en
+    /// vez de este tamaño real, el margen de arrastre se quedaría corto y,
+    /// al ampliar, no dejaría desplazarse lo bastante para llegar a los
+    /// bordes ya recortados de la página (por ejemplo, la primera viñeta,
+    /// pegada arriba).
+    private func renderedContentSize(in size: CGSize) -> CGSize {
+        guard fillsWidth, spread.pages.count == 1,
+              let page = spread.pages.first, let image = images[page],
+              image.size.width > 0, image.size.height > 0 else {
+            return size
+        }
+        let imageAspect = image.size.width / image.size.height
+        let frameAspect = size.width / size.height
+        if imageAspect > frameAspect {
+            return CGSize(width: size.height * imageAspect, height: size.height)
+        } else {
+            return CGSize(width: size.width, height: size.width / imageAspect)
+        }
+    }
+
     /// Impide que el pliego se arrastre fuera de la pantalla y deje un hueco negro.
     private func clamped(_ proposed: CGSize, in size: CGSize) -> CGSize {
-        let limitX = max((size.width * zoom - size.width) / 2, 0)
-        let limitY = max((size.height * zoom - size.height) / 2, 0)
+        let content = renderedContentSize(in: size)
+        let limitX = max((content.width * zoom - size.width) / 2, 0)
+        let limitY = max((content.height * zoom - size.height) / 2, 0)
         return CGSize(width: min(max(proposed.width, -limitX), limitX),
                       height: min(max(proposed.height, -limitY), limitY))
     }
