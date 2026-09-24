@@ -41,7 +41,10 @@ enum ComicImportError: LocalizedError {
     case batchTooLarge
     case insufficientSpace
     case persistence(String)
-    case cleanupFailed
+    /// La importación falló por `underlying` y, además, no se pudo deshacer
+    /// la copia. Se conserva el error original porque es el que explica al
+    /// usuario por qué no se importó nada.
+    case cleanupFailed(underlying: any Error)
 
     var errorDescription: String? {
         switch self {
@@ -57,8 +60,8 @@ enum ComicImportError: LocalizedError {
             return "No hay espacio libre suficiente para copiar estos cómics de forma segura."
         case .persistence(let detail):
             return "Los archivos se han revertido porque no se pudo guardar la biblioteca: \(detail)"
-        case .cleanupFailed:
-            return "No se ha podido revertir por completo la copia. \(AppInfo.displayName) conservará los archivos temporales para evitar perder datos; comprueba el espacio disponible y vuelve a intentarlo."
+        case .cleanupFailed(let underlying):
+            return "\(underlying.localizedDescription) Además, no se ha podido revertir por completo la copia. \(AppInfo.displayName) conservará los archivos temporales para evitar perder datos; comprueba el espacio disponible y vuelve a intentarlo."
         }
     }
 }
@@ -133,14 +136,16 @@ enum ComicImportBatch {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 let displayName = String((rawDisplayName.isEmpty ? "Cómic importado" : rawDisplayName).prefix(160))
                 staged.append((displayName, filename, size, pages, temporaryURL))
-            } catch {
+            } catch let importError {
                 if didAccess { source.stopAccessingSecurityScopedResource() }
                 do {
                     try manager.removeItem(at: staging)
                 } catch {
-                    throw ComicImportError.cleanupFailed
+                    // `error` aquí es el de `removeItem`; el de la importación
+                    // es el del `catch` exterior y es el que se conserva.
+                    throw ComicImportError.cleanupFailed(underlying: importError)
                 }
-                throw error
+                throw importError
             }
             if didAccess { source.stopAccessingSecurityScopedResource() }
         }
@@ -167,7 +172,7 @@ enum ComicImportBatch {
             } catch {
                 removedStaging = false
             }
-            guard removedFinals, removedStaging else { throw ComicImportError.cleanupFailed }
+            guard removedFinals, removedStaging else { throw ComicImportError.cleanupFailed(underlying: error) }
             throw error
         }
     }
