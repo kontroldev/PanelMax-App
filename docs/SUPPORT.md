@@ -2,7 +2,7 @@
 
 Para informar de un error o solicitar ayuda, abre una incidencia en
 [GitHub Issues](https://github.com/kontroldev/PanelMax-App/issues) o escribe
-a [raulgallego79@icloud.com](mailto:raulgallego79@icloud.com).
+a [info@kontroldesignstudio.com](mailto:info@kontroldesignstudio.com).
 
 Incluye, cuando sea posible:
 
