@@ -44,11 +44,14 @@ struct AddIssuesView: View {
                 switch mode {
                 case .range:
                     Section {
+                        // En iPad, `.numberPad` se muestra como un teclado compacto
+                        // flotante que puede tapar el propio campo. `.numbersAndPunctuation`
+                        // es de ancho completo y se acopla abajo como el teclado normal.
                         TextField("Desde", text: $rangeStartText)
-                            .keyboardType(.numberPad)
+                            .keyboardType(.numbersAndPunctuation)
                             .accessibilityLabel("Desde el número")
                         TextField("Hasta", text: $rangeEndText)
-                            .keyboardType(.numberPad)
+                            .keyboardType(.numbersAndPunctuation)
                             .accessibilityLabel("Hasta el número")
                     } header: {
                         Text("Del número… al número…")

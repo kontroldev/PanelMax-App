@@ -1,5 +1,5 @@
 # Política de privacidad de Viñe
-Última actualización: 7 de septiembre de 2026
+Última actualización: 24 de septiembre de 2026
 
 Viñe es una aplicación de Raúl Gallego (`kontroldev`) para organizar una
 colección de cómics y leer archivos propios.
@@ -37,7 +37,7 @@ Viñe. Al desinstalar la app se elimina todo.
 ## Derechos y contacto
 
 Para cualquier duda sobre esta política, escribe a
-[raulgallego79@icloud.com](mailto:raulgallego79@icloud.com).
+[info@kontroldesignstudio.com](mailto:info@kontroldesignstudio.com).
 
 ## Cambios
 
