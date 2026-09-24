@@ -39,19 +39,20 @@ remoto, sin cuenta y sin compras.
 ## Capturas
 
 <p align="center">
-  <img src="docs/screenshots/inicio.png" width="280" alt="Pantalla de inicio de Viñe">
+  <img src="docs/screenshots/inicio.png" width="200" alt="Pantalla de inicio de Viñe en iPhone">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/coleccion.png" width="280" alt="Colección de cómics de Viñe">
+  <img src="docs/screenshots/coleccion.png" width="200" alt="Mi colección en iPhone">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/ipad-coleccion.png" width="320" alt="Mi colección en iPad, con NavigationSplitView">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/ipad-inicio.png" width="320" alt="Pantalla de inicio de Viñe en iPad">
 </p>
 
 <p align="center">
-  <strong>Inicio</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <strong>Mi colección</strong>
-</p>
-
-<p align="center">
-  <sub>Pendiente de actualizar con capturas de la versión 1.0. Las antiguas
-  mostraban el catálogo remoto, que ya no existe en esta versión.</sub>
+  <strong>Inicio (iPhone)</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <strong>Mi colección (iPhone)</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <strong>Mi colección (iPad)</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <strong>Inicio (iPad)</strong>
 </p>
 
 Viñe no distribuye cómics. Los archivos de lectura son seleccionados por
@@ -130,6 +131,26 @@ simulador y compila además la configuración Release. Ninguna prueba necesita
 red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
+
+### Beta 5 — 24 de septiembre de 2026 (24/09/2026)
+
+**Añadido**
+
+- `NavigationSplitView` en "Mi colección" para iPad en ventana ancha: la
+  barra lateral lista solo las series (título y % de completado) y el
+  panel de detalle muestra su ficha completa al seleccionarlas. En iPhone
+  y iPad en ventana estrecha se mantiene el diseño de una sola columna,
+  sin cambios.
+- Capturas de pantalla actualizadas a la versión 1.0 (iPhone e iPad).
+
+**Errores corregidos**
+
+- Teclado numérico en iPad: al añadir un rango de números en "Añadir
+  números", `.numberPad` se mostraba como un teclado flotante compacto que
+  tapaba el propio campo. Ahora usa un teclado de ancho completo.
+- Últimas menciones al nombre antiguo "PanelMax" en contenido visible
+  (README y el cómic de bienvenida incluido en la app) corregidas a
+  "Viñe".
 
 ### Beta — 11 de septiembre de 2026 (11/09/2026)
 
@@ -276,11 +297,11 @@ versiones para quien retome ese trabajo en una versión futura.
 ## Antes de App Store
 
 - [x] Accesibilidad: Dynamic Type y VoiceOver en las pantallas principales.
-- [ ] `NavigationSplitView` en Mi colección para iPad — sigue siendo
-  `NavigationStack` + `List`, con filas de ancho completo en pantalla grande.
-- [ ] Sustituir las capturas por otras de la versión 1.0 (sin catálogo).
+- [x] `NavigationSplitView` en Mi colección para iPad en ventana ancha.
+- [x] Sustituir las capturas por otras de la versión 1.0 (sin catálogo).
 - [ ] Capturas de iPad de 13" para App Store Connect: obligatorias en cuanto
-  el dispositivo está activado, no opcionales.
+  el dispositivo está activado, no opcionales (hay candidatas en
+  `docs/screenshots/ipad-*.png`, pendiente subirlas a App Store Connect).
 - [ ] Comprobar desde un dispositivo real los tres enlaces legales de Perfil
   (dependen de que el repositorio de GitHub siga público).
 - [ ] Completar pruebas en dispositivo y localización.
