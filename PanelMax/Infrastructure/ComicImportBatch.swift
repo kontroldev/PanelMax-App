@@ -34,6 +34,20 @@ struct ImportedComicDraft: Sendable {
     let url: URL
 }
 
+/// Un archivo del lote que no se pudo importar, con el motivo. El resto del
+/// lote sigue adelante: un solo archivo no compatible ya no aborta los
+/// demás (ver `ComicImportBatch.copy`).
+struct SkippedComicImport: Sendable {
+    let name: String
+    let reason: String
+}
+
+/// Resultado de copiar un lote: lo que se importó y lo que se omitió.
+struct ComicImportBatchResult: Sendable {
+    let drafts: [ImportedComicDraft]
+    let skipped: [SkippedComicImport]
+}
+
 enum ComicImportError: LocalizedError {
     case unavailable(String)
     case unsupported(String)
@@ -41,6 +55,10 @@ enum ComicImportError: LocalizedError {
     case batchTooLarge
     case insufficientSpace
     case persistence(String)
+    /// Ningún archivo del lote pasó las comprobaciones. A diferencia de un
+    /// archivo suelto no compatible (que solo se omite, ver `SkippedComicImport`),
+    /// aquí no hay nada que importar y hay que avisar de todos modos.
+    case noneImported([SkippedComicImport])
     /// La importación falló por `underlying` y, además, no se pudo deshacer
     /// la copia. Se conserva el error original porque es el que explica al
     /// usuario por qué no se importó nada.
@@ -60,6 +78,10 @@ enum ComicImportError: LocalizedError {
             return "No hay espacio libre suficiente para copiar estos cómics de forma segura."
         case .persistence(let detail):
             return "Los archivos se han revertido porque no se pudo guardar la biblioteca: \(detail)"
+        case .noneImported(let skipped):
+            let names = skipped.prefix(5).map(\.name).joined(separator: ", ")
+            let rest = skipped.count > 5 ? " y \(skipped.count - 5) más" : ""
+            return "No se pudo importar ningún archivo: \(names)\(rest)."
         case .cleanupFailed(let underlying):
             return "\(underlying.localizedDescription) Además, no se ha podido revertir por completo la copia. \(AppInfo.displayName) conservará los archivos temporales para evitar perder datos; comprueba el espacio disponible y vuelve a intentarlo."
         }
@@ -68,9 +90,17 @@ enum ComicImportError: LocalizedError {
 
 /// Copia atómica de un lote. Los archivos se validan dentro de una carpeta
 /// temporal privada y solo se mueven a su nombre definitivo cuando todos han
-/// pasado las comprobaciones. Cualquier error elimina el lote completo.
+/// pasado las comprobaciones.
+///
+/// Un archivo no compatible (extensión, tamaño individual, corrupto) se
+/// OMITE y se sigue con el resto: con lotes de decenas o cientos de cómics,
+/// que uno solo no compatible cortara toda la subida obligaba a quitarlo a
+/// mano y volver a seleccionar todo. Los límites que son del LOTE entero
+/// (tamaño total o espacio en disco) sí siguen abortando la copia completa:
+/// ahí no hay un archivo culpable que aislar, es la selección entera la que
+/// no cabe.
 enum ComicImportBatch {
-    nonisolated static func copy(_ sources: [URL]) throws -> [ImportedComicDraft] {
+    nonisolated static func copy(_ sources: [URL]) throws -> ComicImportBatchResult {
         let manager = FileManager.default
         // Crea la carpeta y la excluye de la copia de seguridad de iCloud.
         let destination = try LocalComicFile.prepareComicsDirectory()
@@ -82,72 +112,92 @@ enum ComicImportBatch {
         cleanupAbandonedStaging(in: destination, using: manager)
         try manager.createDirectory(at: staging, withIntermediateDirectories: true)
         var staged: [(displayName: String, filename: String, size: Int64, pages: Int, url: URL)] = []
+        var skipped: [SkippedComicImport] = []
         var batchSize: Int64 = 0
 
-        for source in sources {
-            let name = source.lastPathComponent
-            let ext = source.pathExtension.lowercased()
-            guard ["cbz", "zip", "pdf"].contains(ext) else {
-                throw ComicImportError.unsupported(name)
-            }
-
-            let didAccess = source.startAccessingSecurityScopedResource()
-            do {
-                var isDirectory: ObjCBool = false
-                guard manager.fileExists(atPath: source.path, isDirectory: &isDirectory),
-                      !isDirectory.boolValue else {
-                    throw ComicImportError.unavailable(name)
+        do {
+            for source in sources {
+                let name = source.lastPathComponent
+                let ext = source.pathExtension.lowercased()
+                guard ["cbz", "zip", "pdf"].contains(ext) else {
+                    skipped.append(SkippedComicImport(name: name,
+                                                        reason: ComicImportError.unsupported(name).errorDescription ?? ""))
+                    continue
                 }
 
-                let attributes = try manager.attributesOfItem(atPath: source.path)
-                guard attributes[.type] as? FileAttributeType == .typeRegular,
-                      let number = attributes[.size] as? NSNumber else {
-                    throw ComicImportError.unavailable(name)
-                }
+                let didAccess = source.startAccessingSecurityScopedResource()
+                defer { if didAccess { source.stopAccessingSecurityScopedResource() } }
 
-                let size = number.int64Value
-                guard size > 0 else { throw ComicImportError.unsupported(name) }
-                guard size <= maximumFileSize else { throw ComicImportError.tooLarge(name) }
-                let (newBatchSize, overflow) = batchSize.addingReportingOverflow(size)
-                guard !overflow, newBatchSize <= maximumBatchSize else {
+                do {
+                    var isDirectory: ObjCBool = false
+                    guard manager.fileExists(atPath: source.path, isDirectory: &isDirectory),
+                          !isDirectory.boolValue else {
+                        throw ComicImportError.unavailable(name)
+                    }
+
+                    let attributes = try manager.attributesOfItem(atPath: source.path)
+                    guard attributes[.type] as? FileAttributeType == .typeRegular,
+                          let number = attributes[.size] as? NSNumber else {
+                        throw ComicImportError.unavailable(name)
+                    }
+
+                    let size = number.int64Value
+                    guard size > 0 else { throw ComicImportError.unsupported(name) }
+                    guard size <= maximumFileSize else { throw ComicImportError.tooLarge(name) }
+                    let (newBatchSize, overflow) = batchSize.addingReportingOverflow(size)
+                    guard !overflow, newBatchSize <= maximumBatchSize else {
+                        // Límite del LOTE, no de este archivo: se propaga y
+                        // aborta toda la copia (ver el `catch` de abajo).
+                        throw ComicImportError.batchTooLarge
+                    }
+
+                    if let capacity = try destination.resourceValues(
+                        forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+                    ).volumeAvailableCapacityForImportantUsage,
+                       capacity < size + safetyReserve {
+                        throw ComicImportError.insufficientSpace
+                    }
+                    batchSize = newBatchSize
+
+                    let filename = "\(UUID().uuidString).\(ext)"
+                    let temporaryURL = staging.appending(path: filename, directoryHint: .notDirectory)
+                    try manager.copyItem(at: source, to: temporaryURL)
+
+                    let pages: Int
+                    do {
+                        pages = try ComicArchiveFactory.pageCount(at: temporaryURL)
+                    } catch {
+                        // No es un CBZ/PDF legible pese a la extensión: se
+                        // limpia la copia parcial y se omite, no se aborta el lote.
+                        try? manager.removeItem(at: temporaryURL)
+                        throw ComicImportError.unsupported(name)
+                    }
+
+                    let rawDisplayName = source.deletingPathExtension().lastPathComponent
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let displayName = String((rawDisplayName.isEmpty ? "Cómic importado" : rawDisplayName).prefix(160))
+                    staged.append((displayName, filename, size, pages, temporaryURL))
+                } catch ComicImportError.batchTooLarge {
                     throw ComicImportError.batchTooLarge
-                }
-                batchSize = newBatchSize
-
-                if let capacity = try destination.resourceValues(
-                    forKeys: [.volumeAvailableCapacityForImportantUsageKey]
-                ).volumeAvailableCapacityForImportantUsage,
-                   capacity < size + safetyReserve {
+                } catch ComicImportError.insufficientSpace {
                     throw ComicImportError.insufficientSpace
-                }
-
-                let filename = "\(UUID().uuidString).\(ext)"
-                let temporaryURL = staging.appending(path: filename, directoryHint: .notDirectory)
-                try manager.copyItem(at: source, to: temporaryURL)
-
-                let pages: Int
-                do {
-                    pages = try ComicArchiveFactory.pageCount(at: temporaryURL)
+                } catch let importError as ComicImportError {
+                    skipped.append(SkippedComicImport(name: name, reason: importError.errorDescription ?? ""))
                 } catch {
-                    throw ComicImportError.unsupported(name)
+                    skipped.append(SkippedComicImport(name: name, reason: error.localizedDescription))
                 }
-
-                let rawDisplayName = source.deletingPathExtension().lastPathComponent
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                let displayName = String((rawDisplayName.isEmpty ? "Cómic importado" : rawDisplayName).prefix(160))
-                staged.append((displayName, filename, size, pages, temporaryURL))
-            } catch let importError {
-                if didAccess { source.stopAccessingSecurityScopedResource() }
-                do {
-                    try manager.removeItem(at: staging)
-                } catch {
-                    // `error` aquí es el de `removeItem`; el de la importación
-                    // es el del `catch` exterior y es el que se conserva.
-                    throw ComicImportError.cleanupFailed(underlying: importError)
-                }
-                throw importError
             }
-            if didAccess { source.stopAccessingSecurityScopedResource() }
+        } catch {
+            // Fallo de LOTE (tamaño total o espacio en disco): se revierte
+            // todo lo copiado hasta ahora, igual que antes de poder omitir
+            // archivos sueltos.
+            try? manager.removeItem(at: staging)
+            throw error
+        }
+
+        guard !staged.isEmpty else {
+            try? manager.removeItem(at: staging)
+            throw ComicImportError.noneImported(skipped)
         }
 
         var completed: [ImportedComicDraft] = []
@@ -162,7 +212,7 @@ enum ComicImportBatch {
                                                      url: finalURL))
             }
             try manager.removeItem(at: staging)
-            return completed
+            return ComicImportBatchResult(drafts: completed, skipped: skipped)
         } catch {
             let removedFinals = rollback(completed)
             let removedStaging: Bool

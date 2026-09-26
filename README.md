@@ -134,6 +134,38 @@ red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
 
+### En desarrollo — 26 de septiembre de 2026
+
+**Añadido**
+
+- Importación de cómics más tolerante: si en un lote hay un archivo no
+  compatible (formato no soportado, corrupto o que supera el tamaño máximo
+  por archivo), ya no se cancela la importación entera. `ComicImportBatch`
+  omite ese archivo y sigue con el resto; al terminar se avisa de cuáles se
+  omitieron y por qué. Los límites que sí son del lote completo (más de
+  4 GB en total, o espacio en disco insuficiente) siguen abortando toda la
+  importación, porque ahí no hay un archivo culpable que aislar.
+
+**Corregido**
+
+- Lector a pantalla completa inconsistente: al abrir un cómic desde Inicio,
+  Mi colección o Biblioteca, `ReaderView` se presentaba con `NavigationLink`
+  dentro del `NavigationStack` de la pestaña, lo que podía dejar la barra de
+  pestañas de fondo asomando. Solo la ficha de serie lo hacía ya bien, con
+  `fullScreenCover`. Ahora las cuatro entradas al lector usan
+  `fullScreenCover`, consistente en toda la app.
+
+### En desarrollo — 25 de septiembre de 2026
+
+**Cambiado**
+
+- Los tres enlaces legales de Perfil (Condiciones, Privacidad y Soporte)
+  apuntaban a GitHub (y Condiciones a la EULA estándar de Apple). Ahora
+  apuntan a la web propia: `vine.kontroldesignstudio.com/condiciones`,
+  `/privacidad` y `/soporte`. Siguen abriéndose en el navegador del
+  sistema, no dentro de la app: la 1.0 sigue sin hacer peticiones de red
+  propias.
+
 ### Beta 5 — 24 de septiembre de 2026 (24/09/2026)
 
 **Añadido**
@@ -304,8 +336,10 @@ versiones para quien retome ese trabajo en una versión futura.
 - [ ] Capturas de iPad de 13" para App Store Connect: obligatorias en cuanto
   el dispositivo está activado, no opcionales (hay candidatas en
   `docs/screenshots/ipad-*.png`, pendiente subirlas a App Store Connect).
-- [ ] Comprobar desde un dispositivo real los tres enlaces legales de Perfil
-  (dependen de que el repositorio de GitHub siga público).
+- [ ] Comprobar desde un dispositivo real los tres enlaces legales de Perfil,
+  ya en `vine.kontroldesignstudio.com`.
+- [ ] Poner la URL de privacidad (`vine.kontroldesignstudio.com/privacidad`)
+  en el campo "Privacy Policy URL" de App Store Connect.
 - [ ] Completar pruebas en dispositivo y localización.
 - [ ] Ampliar los UI Tests más allá del mínimo actual.
 - [ ] Responder el cuestionario de clasificación por edad en App Store Connect.

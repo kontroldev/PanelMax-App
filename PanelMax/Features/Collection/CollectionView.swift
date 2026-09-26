@@ -14,6 +14,7 @@ struct CollectionView: View {
     @State private var filter: CollectionState = .owned
     @State private var query = ""
     @State private var showsNewSeries = false
+    @State private var presentedIssue: Issue?
     @State private var errorMessage: String?
     /// Solo se usa en el diseño de dos columnas (iPad ancho). En una sola
     /// columna, la ficha de la serie se abre siempre con `NavigationLink`.
@@ -41,6 +42,9 @@ struct CollectionView: View {
         }
         .sheet(isPresented: $showsNewSeries) {
             SeriesFormView()
+        }
+        .fullScreenCover(item: $presentedIssue) { issue in
+            ReaderView(issue: issue)
         }
         .alert("No se ha podido actualizar la colección", isPresented: Binding(
             get: { errorMessage != nil },
@@ -266,7 +270,9 @@ struct CollectionView: View {
             Spacer()
 
             if issue.isReadable {
-                NavigationLink { ReaderView(issue: issue) } label: {
+                Button {
+                    presentedIssue = issue
+                } label: {
                     Image(systemName: "book.fill").foregroundStyle(Theme.accent)
                 }
                 .buttonStyle(.plain)
