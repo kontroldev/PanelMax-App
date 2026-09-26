@@ -132,6 +132,27 @@ red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
 
+### En desarrollo — 26 de septiembre de 2026
+
+**Añadido**
+
+- Importación de cómics más tolerante: si en un lote hay un archivo no
+  compatible (formato no soportado, corrupto o que supera el tamaño máximo
+  por archivo), ya no se cancela la importación entera. `ComicImportBatch`
+  omite ese archivo y sigue con el resto; al terminar se avisa de cuáles se
+  omitieron y por qué. Los límites que sí son del lote completo (más de
+  4 GB en total, o espacio en disco insuficiente) siguen abortando toda la
+  importación, porque ahí no hay un archivo culpable que aislar.
+
+**Corregido**
+
+- Lector a pantalla completa inconsistente: al abrir un cómic desde Inicio,
+  Mi colección o Biblioteca, `ReaderView` se presentaba con `NavigationLink`
+  dentro del `NavigationStack` de la pestaña, lo que podía dejar la barra de
+  pestañas de fondo asomando. Solo la ficha de serie lo hacía ya bien, con
+  `fullScreenCover`. Ahora las cuatro entradas al lector usan
+  `fullScreenCover`, consistente en toda la app.
+
 ### En desarrollo — 25 de septiembre de 2026
 
 **Cambiado**

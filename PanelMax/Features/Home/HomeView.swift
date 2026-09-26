@@ -23,6 +23,8 @@ struct HomeView: View {
     /// recortados a media palabra.
     @ScaledMetric(relativeTo: .caption2) private var cardWidth: CGFloat = 96
 
+    @State private var presentedFile: LocalComicFile?
+
     var body: some View {
         NavigationStack {
             // Una única pasada sobre la colección para todo el cuerpo.
@@ -45,6 +47,9 @@ struct HomeView: View {
                 .padding(.bottom, 24)
             }
             .navigationTitle(AppInfo.displayName)
+            .fullScreenCover(item: $presentedFile) { file in
+                ReaderView(file: file)
+            }
         }
     }
 
@@ -124,8 +129,8 @@ struct HomeView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 10) {
                         ForEach(unfinishedFiles) { file in
-                            NavigationLink {
-                                ReaderView(file: file)
+                            Button {
+                                presentedFile = file
                             } label: {
                                 ReadingCard(file: file, coverWidth: cardWidth)
                                     .frame(width: cardWidth)

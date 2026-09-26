@@ -23,6 +23,8 @@ struct ImportedLibraryView: View {
     @State private var showsImporter = false
     @State private var isImporting = false
     @State private var errorMessage: String?
+    @State private var skippedMessage: String?
+    @State private var presentedFile: LocalComicFile?
     @State private var query = ""
 
     private var store: LibraryStore { LibraryStore(context: context) }
@@ -54,11 +56,12 @@ struct ImportedLibraryView: View {
                 } else {
                     List {
                         ForEach(visible) { file in
-                            NavigationLink {
-                                ReaderView(file: file)
+                            Button {
+                                presentedFile = file
                             } label: {
                                 ImportedComicRow(file: file)
                             }
+                            .buttonStyle(.plain)
                         }
                         .onDelete(perform: delete)
                     }
@@ -90,6 +93,9 @@ struct ImportedLibraryView: View {
                           allowsMultipleSelection: true) { result in
                 handleImport(result)
             }
+            .fullScreenCover(item: $presentedFile) { file in
+                ReaderView(file: file)
+            }
             .task {
                 PendingComicDeletion.cleanup(
                     protecting: Set(files.compactMap(\.localFilename))
@@ -102,6 +108,14 @@ struct ImportedLibraryView: View {
                 Button("De acuerdo", role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .alert("Importación completada", isPresented: Binding(
+                get: { skippedMessage != nil },
+                set: { visible in if !visible { skippedMessage = nil } }
+            )) {
+                Button("De acuerdo", role: .cancel) {}
+            } message: {
+                Text(skippedMessage ?? "")
             }
         }
     }
@@ -143,12 +157,26 @@ struct ImportedLibraryView: View {
                     importer.endImporting()
                 }
                 do {
-                    try await importer.importFiles(from: urls)
+                    let skipped = try await importer.importFiles(from: urls)
+                    if !skipped.isEmpty {
+                        skippedMessage = Self.skippedMessage(for: skipped)
+                    }
                 } catch {
                     errorMessage = error.localizedDescription
                 }
             }
         }
+    }
+
+    /// Mensaje para los archivos que se omitieron aunque el resto del lote
+    /// se haya importado con éxito (ver `LibraryStore.importFiles`).
+    private static func skippedMessage(for skipped: [SkippedComicImport]) -> String {
+        let intro = skipped.count == 1
+            ? "Se omitió 1 archivo porque no era compatible:"
+            : "Se omitieron \(skipped.count) archivos porque no eran compatibles:"
+        let detail = skipped.prefix(5).map { "• \($0.name)" }.joined(separator: "\n")
+        let rest = skipped.count > 5 ? "\n… y \(skipped.count - 5) más." : ""
+        return "\(intro)\n\(detail)\(rest)\n\nEl resto de los cómics se ha importado correctamente."
     }
 
     // MARK: - Borrado

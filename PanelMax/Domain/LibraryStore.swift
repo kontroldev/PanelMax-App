@@ -36,15 +36,21 @@ struct LibraryStore {
     /// Llamar a `beginImporting()` es responsabilidad de quien invoca esto,
     /// no de esta función: así la vista puede decidir NO encender su
     /// indicador de carga cuando ya había una importación en curso.
-    func importFiles(from urls: [URL]) async throws {
+    ///
+    /// Devuelve los archivos del lote que se omitieron (no compatibles,
+    /// corruptos, etc.) para que la vista pueda avisar de ellos aunque el
+    /// resto del lote se haya importado con éxito.
+    @discardableResult
+    func importFiles(from urls: [URL]) async throws -> [SkippedComicImport] {
         // Un contenedor propio, no `context`: un contexto separado hace que
         // un fallo del lote no revierta cambios no relacionados de la
         // interfaz principal que estuvieran pendientes de guardar.
         let container = context.container
 
-        let drafts = try await Task.detached(priority: .userInitiated) {
+        let result = try await Task.detached(priority: .userInitiated) {
             try ComicImportBatch.copy(urls)
         }.value
+        let drafts = result.drafts
 
         do {
             let importContext = ModelContext(container)
@@ -70,6 +76,8 @@ struct LibraryStore {
             }
             throw ComicImportError.persistence(error.localizedDescription)
         }
+
+        return result.skipped
     }
 
     // MARK: - Borrado
