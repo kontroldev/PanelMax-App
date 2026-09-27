@@ -5,7 +5,7 @@ import SwiftData
 ///
 /// La 1.0 es una app 100% local: sin catálogo remoto, sin cuenta y sin
 /// compras. Lo único que se monta al arrancar es el contenedor de SwiftData
-/// (la colección del usuario) y, la primera vez, el cómic de ejemplo.
+/// (la colección del usuario).
 @main
 struct PanelMaxApp: App {
 
@@ -61,8 +61,6 @@ struct PanelMaxApp: App {
                     // seguridad ANTES de que exista ningún archivo dentro: excluir
                     // después no retira del respaldo lo ya copiado.
                     _ = try? LocalComicFile.prepareComicsDirectory()
-
-                    SampleLibrarySeeder.seedIfNeeded(context: modelContainer.mainContext)
                 }
         }
         .modelContainer(modelContainer)

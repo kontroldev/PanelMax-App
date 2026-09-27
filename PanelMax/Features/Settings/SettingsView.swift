@@ -12,6 +12,7 @@ struct SettingsView: View {
 
     @State private var exportURL: URL?
     @State private var exportError: String?
+    @State private var showsOnboarding = false
 
     private var store: CollectionStore { CollectionStore(context: context) }
 
@@ -31,6 +32,9 @@ struct SettingsView: View {
                 Button("De acuerdo", role: .cancel) {}
             } message: {
                 Text(exportError ?? "")
+            }
+            .fullScreenCover(isPresented: $showsOnboarding) {
+                OnboardingView { showsOnboarding = false }
             }
         }
     }
@@ -99,6 +103,13 @@ struct SettingsView: View {
     private var aboutSection: some View {
         Section {
             LabeledContent("Versión", value: Bundle.main.appVersion)
+
+            Button {
+                showsOnboarding = true
+            } label: {
+                Label("Ver introducción", systemImage: "hand.wave")
+            }
+            .accessibilityHint("Vuelve a enseñar la presentación de bienvenida de \(AppInfo.displayName).")
         } header: {
             Text("Acerca de")
         } footer: {
