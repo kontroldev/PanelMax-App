@@ -27,6 +27,19 @@ struct LibraryStore {
         ComicImportCoordinator.end()
     }
 
+    /// Quita el cómic de ejemplo que sembraba el antiguo `SampleLibrarySeeder`.
+    ///
+    /// Ese seeder ya no existe (ver `OnboardingView`), pero quien lo tuviera
+    /// instalado con una build anterior conserva la fila en SwiftData: sin
+    /// este barrido seguiría viéndose en los dispositivos que ya la tenían.
+    func removeLegacySampleComicIfNeeded() {
+        let legacyFilename = "bienvenido-a-panelmax.cbz"
+        guard let matches = try? context.fetch(FetchDescriptor<LocalComicFile>(
+            predicate: #Predicate { $0.localFilename == legacyFilename }
+        )), !matches.isEmpty else { return }
+        try? delete(matches)
+    }
+
     /// Copia un lote de archivos ya elegidos por el usuario al contenedor
     /// privado, genera su miniatura y los inserta en la biblioteca.
     ///
@@ -38,8 +51,9 @@ struct LibraryStore {
     /// indicador de carga cuando ya había una importación en curso.
     ///
     /// Devuelve los archivos del lote que se omitieron (no compatibles,
-    /// corruptos, etc.) para que la vista pueda avisar de ellos aunque el
-    /// resto del lote se haya importado con éxito.
+    /// corruptos, duplicados de uno ya importado, etc.) para que la vista
+    /// pueda avisar de ellos aunque el resto del lote se haya importado con
+    /// éxito.
     @discardableResult
     func importFiles(from urls: [URL]) async throws -> [SkippedComicImport] {
         // Un contenedor propio, no `context`: un contexto separado hace que
@@ -50,11 +64,42 @@ struct LibraryStore {
         let result = try await Task.detached(priority: .userInitiated) {
             try ComicImportBatch.copy(urls)
         }.value
-        let drafts = result.drafts
+        var skipped = result.skipped
+
+        // Firma (nombre + tamaño) de lo que ya hay en la biblioteca, para no
+        // duplicar un cómic que el usuario vuelve a seleccionar por error.
+        // Comparar el contenido byte a byte no compensa: los CBZ pueden
+        // pesar hasta 2 GB y esta firma ya detecta el caso real (reimportar
+        // el mismo archivo, o elegirlo dos veces en el mismo lote).
+        var knownSignatures = Set(
+            try context.fetch(FetchDescriptor<LocalComicFile>())
+                .map { Self.signature(name: $0.displayName, size: $0.fileSize) }
+        )
+
+        var accepted: [ImportedComicDraft] = []
+        var duplicates: [ImportedComicDraft] = []
+        for draft in result.drafts {
+            let signature = Self.signature(name: draft.displayName, size: draft.fileSize)
+            if knownSignatures.insert(signature).inserted {
+                accepted.append(draft)
+            } else {
+                duplicates.append(draft)
+                skipped.append(SkippedComicImport(name: draft.displayName,
+                                                   reason: "«\(draft.displayName)» ya está en tu biblioteca."))
+            }
+        }
+        // Los duplicados ya se copiaron a `Comics/` dentro de
+        // `ComicImportBatch.copy`; al no insertarse en la biblioteca hay que
+        // borrar esa copia sobrante.
+        ComicImportBatch.rollback(duplicates)
+
+        guard !accepted.isEmpty else {
+            throw ComicImportError.noneImported(skipped)
+        }
 
         do {
             let importContext = ModelContext(container)
-            for draft in drafts {
+            for draft in accepted {
                 let file = LocalComicFile(displayName: draft.displayName,
                                           localFilename: draft.filename)
                 file.fileSize = draft.fileSize
@@ -71,13 +116,20 @@ struct LibraryStore {
             }
             try importContext.save()
         } catch {
-            guard ComicImportBatch.rollback(drafts) else {
+            guard ComicImportBatch.rollback(accepted) else {
                 throw ComicImportError.cleanupFailed(underlying: error)
             }
             throw ComicImportError.persistence(error.localizedDescription)
         }
 
-        return result.skipped
+        return skipped
+    }
+
+    /// Identifica un cómic por nombre (normalizado) y tamaño exacto, para
+    /// detectar reimportaciones del mismo archivo sin tener que comparar su
+    /// contenido byte a byte.
+    private static func signature(name: String, size: Int64) -> String {
+        "\(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(size)"
     }
 
     // MARK: - Borrado

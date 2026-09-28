@@ -10,32 +10,87 @@ import XCTest
 final class PanelMaxUITests: XCTestCase {
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
     }
 
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
+    /// Recorre las cinco páginas del onboarding con "Siguiente" y termina
+    /// con "Empezar", comprobando que al acabar se ve la app real (la barra
+    /// de pestañas). `-uiTestsShowOnboarding` fuerza que se muestre sin
+    /// depender de si el simulador ya la había marcado como vista.
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testOnboardingCanBeCompletedWithNextButtons() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-uiTestsInMemoryStore", "-uiTestsShowOnboarding"]
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
+        XCTAssertTrue(app.staticTexts["Bienvenido a Viñe"].waitForExistence(timeout: 5))
+
+        // 5 páginas: de la 0 a la última (4) hacen falta 4 toques en "Siguiente".
+        for _ in 0..<4 {
+            app.buttons["Siguiente"].firstMatch.tap()
+        }
+
+        let startButton = app.buttons["Empezar"].firstMatch
+        XCTAssertTrue(startButton.waitForExistence(timeout: 2))
+        startButton.tap()
+
+        XCTAssertTrue(app.buttons["Mi colección"].firstMatch.waitForExistence(timeout: 2))
+    }
+
+    /// Salta la introducción con la X y comprueba que se llega directamente
+    /// a la app.
+    @MainActor
+    func testOnboardingCanBeSkipped() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTestsInMemoryStore", "-uiTestsShowOnboarding"]
+        app.launch()
+
+        app.buttons["Saltar la introducción"].firstMatch.tap()
+
+        XCTAssertTrue(app.buttons["Mi colección"].firstMatch.waitForExistence(timeout: 2))
+    }
+
+    /// Crea una serie desde cero, comprueba que aparece en la lista y la
+    /// elimina desde su ficha. Cubre el camino de alta/borrado manual que
+    /// sustituye a la búsqueda de catálogo en la 1.0.
+    ///
+    /// La barra de pestañas flotante nueva expone cada botón por duplicado
+    /// en el árbol de accesibilidad (contenedor + botón interno): por eso
+    /// todos los botones de este test usan `.firstMatch` en vez de asumir
+    /// que la consulta devuelve un único elemento.
+    @MainActor
+    func testCreateAndDeleteSeries() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTestsInMemoryStore", "-uiTestsSkipOnboarding"]
+        app.launch()
+
+        app.buttons["Mi colección"].firstMatch.tap()
+
+        let addButton = app.buttons["Nueva serie"].firstMatch
+        XCTAssertTrue(addButton.waitForExistence(timeout: 2))
+        addButton.tap()
+
+        let titleField = app.textFields["Título"].firstMatch
+        XCTAssertTrue(titleField.waitForExistence(timeout: 2))
+        titleField.tap()
+        titleField.typeText("Cuervo Negro")
+
+        app.buttons["Guardar"].firstMatch.tap()
+
+        let seriesRow = app.staticTexts["Cuervo Negro"].firstMatch
+        XCTAssertTrue(seriesRow.waitForExistence(timeout: 2))
+        seriesRow.tap()
+
+        app.buttons["Opciones de la serie"].firstMatch.tap()
+        app.buttons["Eliminar serie"].firstMatch.tap() // el ítem del menú, abre el confirmationDialog
+        app.buttons["Eliminar serie"].firstMatch.tap() // el botón destructivo del propio diálogo
+
+        XCTAssertTrue(app.staticTexts["Aún no has catalogado nada"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.staticTexts["Cuervo Negro"].exists)
     }
 
     @MainActor
     func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }

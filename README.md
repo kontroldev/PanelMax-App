@@ -134,6 +134,38 @@ red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
 
+### En desarrollo — 28 de septiembre de 2026
+
+**Cambiado**
+
+- Mensaje de error cuando falla una importación completa de cómics: antes
+  solo listaba los nombres de los archivos afectados; ahora explica el
+  motivo real de cada uno (formato no compatible, corrupto, demasiado
+  grande...).
+- Enlaces legales de Perfil: la web propia cambia de subdominio a ruta
+  (`vine.kontroldesignstudio.com/...` → `kontroldesignstudio.com/vine/...`).
+
+**Añadido**
+
+- Logo propio de la app en la primera pantalla del onboarding, sustituyendo
+  al icono de sistema que había de marcador.
+- Limpieza automática, al arrancar, del cómic de ejemplo que sembraba el
+  antiguo `SampleLibrarySeeder`: quien lo tuviera instalado de una build
+  anterior deja de verlo en su biblioteca.
+- Tests de UI ampliados: recorrido completo del onboarding con "Siguiente",
+  salto del onboarding, y alta/borrado de una serie desde cero. Se apoyan en
+  nuevos argumentos de arranque (`-uiTestsInMemoryStore`,
+  `-uiTestsSkipOnboarding`, `-uiTestsShowOnboarding`) para que cada test
+  arranque en un estado conocido, sin depender de lo que quedara en el
+  simulador de una ejecución anterior.
+
+**Corregido**
+
+- Tarjetas de muestra del onboarding (biblioteca, colección, lector): con
+  tamaños de letra de accesibilidad grandes se recortaba su texto interno.
+  Ahora tienen su propio límite de tamaño, sin afectar al título y subtítulo
+  reales de cada pantalla, que siguen escalando sin límite.
+
 ### En desarrollo — 26 de septiembre de 2026
 
 **Añadido**
@@ -337,8 +369,8 @@ versiones para quien retome ese trabajo en una versión futura.
   el dispositivo está activado, no opcionales (hay candidatas en
   `docs/screenshots/ipad-*.png`, pendiente subirlas a App Store Connect).
 - [ ] Comprobar desde un dispositivo real los tres enlaces legales de Perfil,
-  ya en `vine.kontroldesignstudio.com`.
-- [ ] Poner la URL de privacidad (`vine.kontroldesignstudio.com/privacidad`)
+  ya en `kontroldesignstudio.com/vine/`.
+- [ ] Poner la URL de privacidad (`kontroldesignstudio.com/vine/privacy`)
   en el campo "Privacy Policy URL" de App Store Connect.
 - [ ] Completar pruebas en dispositivo y localización.
 - [ ] Ampliar los UI Tests más allá del mínimo actual.

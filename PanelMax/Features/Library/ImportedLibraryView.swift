@@ -169,12 +169,14 @@ struct ImportedLibraryView: View {
     }
 
     /// Mensaje para los archivos que se omitieron aunque el resto del lote
-    /// se haya importado con éxito (ver `LibraryStore.importFiles`).
+    /// se haya importado con éxito (ver `LibraryStore.importFiles`). Cada
+    /// motivo ya viene formado con el nombre del archivo incluido (no
+    /// compatible, duplicado, etc.), así que aquí solo se listan.
     private static func skippedMessage(for skipped: [SkippedComicImport]) -> String {
         let intro = skipped.count == 1
-            ? "Se omitió 1 archivo porque no era compatible:"
-            : "Se omitieron \(skipped.count) archivos porque no eran compatibles:"
-        let detail = skipped.prefix(5).map { "• \($0.name)" }.joined(separator: "\n")
+            ? "Se omitió 1 archivo:"
+            : "Se omitieron \(skipped.count) archivos:"
+        let detail = skipped.prefix(5).map { "• \($0.reason)" }.joined(separator: "\n")
         let rest = skipped.count > 5 ? "\n… y \(skipped.count - 5) más." : ""
         return "\(intro)\n\(detail)\(rest)\n\nEl resto de los cómics se ha importado correctamente."
     }

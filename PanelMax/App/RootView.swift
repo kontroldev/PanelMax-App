@@ -8,12 +8,21 @@ import SwiftData
 /// producto, así que sube a pestaña propia.
 struct RootView: View {
 
+    /// Se guarda directamente, no con `@AppStorage`: solo se lee una vez, en
+    /// `init`, para decidir si `showsOnboarding` empieza en `true`. Igual que
+    /// hacía `SampleLibrarySeeder` con su propia bandera.
+    private static let onboardingSeenKey = "panelmax.onboardingSeen"
+
+    @Environment(\.modelContext) private var modelContext
+
     private let persistenceWarning: String?
     @State private var showsPersistenceWarning: Bool
+    @State private var showsOnboarding: Bool
 
     init(persistenceWarning: String? = nil) {
         self.persistenceWarning = persistenceWarning
         _showsPersistenceWarning = State(initialValue: persistenceWarning != nil)
+        _showsOnboarding = State(initialValue: !UserDefaults.standard.bool(forKey: Self.onboardingSeenKey))
     }
 
     /// Pestaña seleccionada. Se guarda para que la app vuelva donde estabas.
@@ -42,6 +51,15 @@ struct RootView: View {
                 .tag(Tab.profile)
         }
         .tint(Theme.accent)
+        .task {
+            LibraryStore(context: modelContext).removeLegacySampleComicIfNeeded()
+        }
+        .fullScreenCover(isPresented: $showsOnboarding) {
+            OnboardingView {
+                UserDefaults.standard.set(true, forKey: Self.onboardingSeenKey)
+                showsOnboarding = false
+            }
+        }
         .alert("La colección no está disponible", isPresented: $showsPersistenceWarning) {
             Button("De acuerdo", role: .cancel) {}
         } message: {
