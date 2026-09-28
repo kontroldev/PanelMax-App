@@ -9,11 +9,11 @@ import Foundation
 enum LegalLinks {
 
     /// Condiciones de uso publicadas en la web de Viñe.
-    static let terms = URL(string: "https://vine.kontroldesignstudio.com/condiciones")!
+    static let terms = URL(string: "https://kontroldesignstudio.com/vine/terms")!
 
     /// Política de privacidad publicada en la web de Viñe.
-    static let privacy = URL(string: "https://vine.kontroldesignstudio.com/privacidad")!
+    static let privacy = URL(string: "https://kontroldesignstudio.com/vine/privacy")!
 
     /// Soporte publicado en la web de Viñe.
-    static let support = URL(string: "https://vine.kontroldesignstudio.com/soporte")!
+    static let support = URL(string: "https://kontroldesignstudio.com/vine/support")!
 }

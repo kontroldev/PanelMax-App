@@ -27,6 +27,19 @@ struct LibraryStore {
         ComicImportCoordinator.end()
     }
 
+    /// Quita el cómic de ejemplo que sembraba el antiguo `SampleLibrarySeeder`.
+    ///
+    /// Ese seeder ya no existe (ver `OnboardingView`), pero quien lo tuviera
+    /// instalado con una build anterior conserva la fila en SwiftData: sin
+    /// este barrido seguiría viéndose en los dispositivos que ya la tenían.
+    func removeLegacySampleComicIfNeeded() {
+        let legacyFilename = "bienvenido-a-panelmax.cbz"
+        guard let matches = try? context.fetch(FetchDescriptor<LocalComicFile>(
+            predicate: #Predicate { $0.localFilename == legacyFilename }
+        )), !matches.isEmpty else { return }
+        try? delete(matches)
+    }
+
     /// Copia un lote de archivos ya elegidos por el usuario al contenedor
     /// privado, genera su miniatura y los inserta en la biblioteca.
     ///

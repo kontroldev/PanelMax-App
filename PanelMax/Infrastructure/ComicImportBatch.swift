@@ -79,9 +79,9 @@ enum ComicImportError: LocalizedError {
         case .persistence(let detail):
             return "Los archivos se han revertido porque no se pudo guardar la biblioteca: \(detail)"
         case .noneImported(let skipped):
-            let names = skipped.prefix(5).map(\.name).joined(separator: ", ")
-            let rest = skipped.count > 5 ? " y \(skipped.count - 5) más" : ""
-            return "No se pudo importar ningún archivo: \(names)\(rest)."
+            let reasons = skipped.prefix(5).map(\.reason).joined(separator: "\n")
+            let rest = skipped.count > 5 ? "\ny \(skipped.count - 5) más." : ""
+            return "No se pudo importar ningún archivo.\n\(reasons)\(rest)"
         case .cleanupFailed(let underlying):
             return "\(underlying.localizedDescription) Además, no se ha podido revertir por completo la copia. \(AppInfo.displayName) conservará los archivos temporales para evitar perder datos; comprueba el espacio disponible y vuelve a intentarlo."
         }

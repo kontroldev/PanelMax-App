@@ -20,7 +20,7 @@ struct OnboardingView: View {
         OnboardingPage(
             title: "Bienvenido a \(AppInfo.displayName)",
             subtitle: "Tu lector de cómics privado: importa, organiza y lee, todo en tu dispositivo.",
-            content: .icon("books.vertical.fill")
+            content: .logo
         ),
         OnboardingPage(
             title: "Importa tus cómics",
@@ -106,6 +106,7 @@ struct OnboardingView: View {
 
 private enum OnboardingContent {
     case icon(String)
+    case logo
     case library
     case collection
     case reader
@@ -156,12 +157,27 @@ private struct OnboardingPageView: View {
             Image(systemName: symbol)
                 .font(.system(size: 88, weight: .regular))
                 .foregroundStyle(Theme.accent)
+        case .logo:
+            Image("AppLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 120, height: 120)
+                .clipShape(RoundedRectangle(cornerRadius: 27, style: .continuous))
+                .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
         case .library:
+            // Vista previa no interactiva de tamaño fijo, como una captura de
+            // pantalla: se limita a `.large` para que el texto no se recorte
+            // dentro de la tarjeta a tamaños de accesibilidad grandes. El
+            // texto real de la app (título y subtítulo de esta misma
+            // pantalla) sigue escalando sin límite.
             LibraryMockupCard()
+                .dynamicTypeSize(...DynamicTypeSize.large)
         case .collection:
             CollectionMockupCard()
+                .dynamicTypeSize(...DynamicTypeSize.large)
         case .reader:
             ReaderMockupCard()
+                .dynamicTypeSize(...DynamicTypeSize.large)
         }
     }
 }

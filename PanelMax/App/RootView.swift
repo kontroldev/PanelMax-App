@@ -13,6 +13,8 @@ struct RootView: View {
     /// hacía `SampleLibrarySeeder` con su propia bandera.
     private static let onboardingSeenKey = "panelmax.onboardingSeen"
 
+    @Environment(\.modelContext) private var modelContext
+
     private let persistenceWarning: String?
     @State private var showsPersistenceWarning: Bool
     @State private var showsOnboarding: Bool
@@ -49,6 +51,9 @@ struct RootView: View {
                 .tag(Tab.profile)
         }
         .tint(Theme.accent)
+        .task {
+            LibraryStore(context: modelContext).removeLegacySampleComicIfNeeded()
+        }
         .fullScreenCover(isPresented: $showsOnboarding) {
             OnboardingView {
                 UserDefaults.standard.set(true, forKey: Self.onboardingSeenKey)
