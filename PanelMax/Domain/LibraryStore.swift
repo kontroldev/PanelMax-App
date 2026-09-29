@@ -132,6 +132,60 @@ struct LibraryStore {
         "\(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(size)"
     }
 
+    // MARK: - Volver a enlazar
+
+    /// Recupera el acceso a un archivo cuyo marcador caducó (tras reinstalar
+    /// la app) o cuya copia interna se perdió (restauración de backup sin
+    /// `Comics/`, que está excluida a propósito). Reutiliza la misma copia y
+    /// validación que una importación normal, pero conservando el registro
+    /// existente: el número al que estaba vinculado y el progreso de lectura
+    /// no se pierden.
+    func relink(_ file: LocalComicFile, to url: URL) async throws {
+        let result = try await Task.detached(priority: .userInitiated) {
+            try ComicImportBatch.copy([url])
+        }.value
+        guard let draft = result.drafts.first else {
+            throw ComicImportError.noneImported(result.skipped)
+        }
+
+        let oldFilename = file.localFilename
+        file.localFilename = draft.filename
+        file.bookmark = nil
+        file.fileSize = draft.fileSize
+        file.pageCount = draft.pageCount
+        if draft.pageCount > 0 {
+            file.currentPage = min(file.currentPage, draft.pageCount - 1)
+        }
+
+        // La portada vieja puede haberse perdido por el mismo motivo que el
+        // archivo: si ya no hay una miniatura accesible, se regenera desde
+        // la página 1 del archivo recién recuperado.
+        let thumbnailMissing = file.thumbnailFilename == nil || file.thumbnailURL.map {
+            !FileManager.default.fileExists(atPath: $0.path)
+        } ?? true
+        if thumbnailMissing,
+           let data = await ThumbnailGenerator.makeThumbnail(for: draft.url),
+           let thumbnailFilename = try? ThumbnailStore.save(data) {
+            file.thumbnailFilename = thumbnailFilename
+        }
+
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            ComicImportBatch.rollback([draft])
+            throw error
+        }
+
+        // El archivo antiguo ya no existía (por eso hacía falta reenlazar);
+        // esto solo libera espacio en el caso raro de que sí quedara algo.
+        if let oldFilename, oldFilename != draft.filename,
+           let oldURL = try? LocalComicFile.storageURL(for: oldFilename),
+           FileManager.default.fileExists(atPath: oldURL.path) {
+            try? FileManager.default.removeItem(at: oldURL)
+        }
+    }
+
     // MARK: - Borrado
 
     /// Borra varios archivos importados.
