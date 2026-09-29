@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// Ficha de una serie catalogada a mano.
 ///
@@ -21,6 +22,8 @@ struct SeriesDetailView: View {
     @State private var presentedFile: LocalComicFile?
     @State private var confirmsDeletion = false
     @State private var errorMessage: String?
+    @State private var relinkTarget: LocalComicFile?
+    @State private var showsRelinkImporter = false
     @Environment(\.dismiss) private var dismiss
 
     /// El ancho mínimo de cada cuadrito escala con el tamaño de texto: con
@@ -34,6 +37,7 @@ struct SeriesDetailView: View {
     }
 
     private var store: CollectionStore { CollectionStore(context: context) }
+    private var libraryStore: LibraryStore { LibraryStore(context: context) }
 
     private var sortedIssues: [Issue] {
         ComicNumber.sorted(series.issues ?? [], by: \.number)
@@ -86,6 +90,10 @@ struct SeriesDetailView: View {
         }
         .fullScreenCover(item: $presentedFile) { file in
             ReaderView(file: file)
+        }
+        .fileImporter(isPresented: $showsRelinkImporter,
+                      allowedContentTypes: ImportedLibraryView.importableTypes) { result in
+            handleRelink(result)
         }
         .confirmationDialog("¿Eliminar esta serie?", isPresented: $confirmsDeletion, titleVisibility: .visible) {
             Button("Eliminar serie", role: .destructive) { deleteSeries() }
@@ -213,10 +221,19 @@ struct SeriesDetailView: View {
         Divider()
 
         if let file = issue.file {
-            Button {
-                presentedFile = file
-            } label: {
-                Label("Leer", systemImage: "book.fill")
+            if file.isAvailable {
+                Button {
+                    presentedFile = file
+                } label: {
+                    Label("Leer", systemImage: "book.fill")
+                }
+            } else {
+                Button {
+                    relinkTarget = file
+                    showsRelinkImporter = true
+                } label: {
+                    Label("Volver a enlazar archivo", systemImage: "link")
+                }
             }
             Button {
                 write { try store.unlink(file) }
@@ -256,6 +273,29 @@ struct SeriesDetailView: View {
         }
     }
 
+    /// El archivo se captura ANTES de que el selector se cierre y ponga
+    /// `showsRelinkImporter` a `false`: `relinkTarget` es un estado aparte,
+    /// así que sigue disponible cuando llega el resultado.
+    private func handleRelink(_ result: Result<URL, Error>) {
+        guard let file = relinkTarget else { return }
+        relinkTarget = nil
+
+        switch result {
+        case .failure(let error):
+            if (error as NSError).code != NSUserCancelledError {
+                errorMessage = error.localizedDescription
+            }
+        case .success(let url):
+            Task {
+                do {
+                    try await libraryStore.relink(file, to: url)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private func write(_ operation: () throws -> Void) {
         do {
             try operation()
@@ -289,20 +329,32 @@ private struct NumberChip: View {
         }
     }
 
+    /// El archivo puede estar vinculado pero haber perdido el acceso
+    /// (marcador caducado, copia interna perdida en una restauración de
+    /// backup): en ese caso no basta con mirar `issue.isReadable`.
+    private var fileIsUnavailable: Bool {
+        guard let file = issue.file else { return false }
+        return !file.isAvailable
+    }
+
     private var accessibilityValue: String {
+        let base: String
         switch state {
-        case .owned: "en la colección"
-        case .read:  "leído"
-        case .wanted: "lo quieres"
-        case .none:  "sin estado"
+        case .owned: base = "en la colección"
+        case .read:  base = "leído"
+        case .wanted: base = "lo quieres"
+        case .none:  base = "sin estado"
         }
+        return fileIsUnavailable ? "\(base), archivo no disponible" : base
     }
 
     var body: some View {
         VStack(spacing: 2) {
             Text(issue.number)
                 .font(.subheadline.weight(.semibold))
-            if issue.isReadable {
+            if fileIsUnavailable {
+                Image(systemName: "exclamationmark.triangle.fill").font(.caption2)
+            } else if issue.isReadable {
                 Image(systemName: "book.fill").font(.caption2)
             }
         }

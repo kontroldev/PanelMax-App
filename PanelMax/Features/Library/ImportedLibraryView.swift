@@ -27,6 +27,10 @@ struct ImportedLibraryView: View {
     @State private var presentedFile: LocalComicFile?
     @State private var query = ""
 
+    // MARK: - Volver a enlazar
+    @State private var relinkTarget: LocalComicFile?
+    @State private var showsRelinkImporter = false
+
     private var store: LibraryStore { LibraryStore(context: context) }
 
     private var visibleFiles: [LocalComicFile] {
@@ -62,6 +66,17 @@ struct ImportedLibraryView: View {
                                 ImportedComicRow(file: file)
                             }
                             .buttonStyle(.plain)
+                            .swipeActions(edge: .leading) {
+                                if !file.isAvailable {
+                                    Button {
+                                        relinkTarget = file
+                                        showsRelinkImporter = true
+                                    } label: {
+                                        Label("Volver a enlazar", systemImage: "link")
+                                    }
+                                    .tint(Theme.accent)
+                                }
+                            }
                         }
                         .onDelete(perform: delete)
                     }
@@ -92,6 +107,10 @@ struct ImportedLibraryView: View {
                           allowedContentTypes: Self.importableTypes,
                           allowsMultipleSelection: true) { result in
                 handleImport(result)
+            }
+            .fileImporter(isPresented: $showsRelinkImporter,
+                          allowedContentTypes: Self.importableTypes) { result in
+                handleRelink(result)
             }
             .fullScreenCover(item: $presentedFile) { file in
                 ReaderView(file: file)
@@ -168,6 +187,32 @@ struct ImportedLibraryView: View {
         }
     }
 
+    // MARK: - Volver a enlazar
+
+    /// El archivo se guarda ANTES de que `showsRelinkImporter` se ponga a
+    /// `false` al cerrarse el selector, pero SwiftUI no despeja `relinkTarget`
+    /// por su cuenta (no es el binding del selector): sigue disponible aquí
+    /// cuando llega el resultado.
+    private func handleRelink(_ result: Result<URL, Error>) {
+        guard let file = relinkTarget else { return }
+        relinkTarget = nil
+
+        switch result {
+        case .failure(let error):
+            if (error as NSError).code != NSUserCancelledError {
+                errorMessage = error.localizedDescription
+            }
+        case .success(let url):
+            Task {
+                do {
+                    try await store.relink(file, to: url)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     /// Mensaje para los archivos que se omitieron aunque el resto del lote
     /// se haya importado con éxito (ver `LibraryStore.importFiles`). Cada
     /// motivo ya viene formado con el nombre del archivo incluido (no
@@ -222,6 +267,12 @@ private struct ImportedComicRow: View {
                     ProgressView(value: file.progressFraction)
                         .tint(file.isFinished ? .green : Theme.accent)
                 }
+
+                if !file.isAvailable {
+                    Label("Archivo no disponible", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
             }
         }
         .padding(.vertical, 3)
@@ -241,6 +292,9 @@ private struct ImportedComicRow: View {
             parts.append(position)
         } else {
             parts.append("Sin empezar")
+        }
+        if !file.isAvailable {
+            parts.append("Archivo no disponible, desliza para volver a enlazarlo")
         }
         return parts.joined(separator: ", ")
     }

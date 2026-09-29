@@ -173,6 +173,14 @@ final class LocalComicFile {
         return url
     }
 
+    /// Si el archivo se puede resolver ahora mismo. Nunca lanza: solo sirve
+    /// para decidir si la interfaz avisa de que hay que volver a enlazarlo
+    /// (marcador caducado tras reinstalar la app, o copia interna perdida en
+    /// una restauración de backup que no incluye `Comics/`).
+    var isAvailable: Bool {
+        (try? resolveURL()) != nil
+    }
+
     /// Regenera el marcador tras acceder correctamente al archivo. Debe llamarse
     /// dentro del alcance de seguridad, no después de liberarlo.
     func refreshBookmarkIfNeeded(from url: URL) {
