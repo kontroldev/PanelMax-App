@@ -132,6 +132,20 @@ red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
 
+### En desarrollo — 29 de septiembre de 2026
+
+**Añadido**
+
+- Volver a enlazar archivos perdidos: si un cómic importado (en Biblioteca o
+  vinculado a un número de Mi colección) pierde el acceso a su archivo — el
+  marcador de seguridad caduca al reinstalar la app, o la copia interna no
+  vuelve en una restauración de backup porque `Documents/Comics` está
+  excluida a propósito — ahora se avisa con "Archivo no disponible" y se
+  puede recuperar el acceso eligiendo el archivo de nuevo, sin perder el
+  progreso de lectura ni el vínculo con el número catalogado. Nuevo
+  `LibraryStore.relink(_:to:)`, que reutiliza la misma copia y validación de
+  una importación normal.
+
 ### En desarrollo — 28 de septiembre de 2026
 
 **Cambiado**
