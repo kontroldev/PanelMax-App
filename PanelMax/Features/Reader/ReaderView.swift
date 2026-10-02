@@ -163,31 +163,51 @@ struct ReaderView: View {
     private func controls(isDouble: Bool, fitsDouble: Bool) -> some View {
         VStack {
             HStack {
+                // Botón redondo y aparte del título: un `Label` con el
+                // nombre del cómic daba un área táctil que variaba con la
+                // longitud del título (a veces diminuta, por ejemplo con un
+                // número de serie corto) y una flecha pequeña. Un botón
+                // circular de tamaño fijo es fácil de acertar siempre, con
+                // el dedo donde sea, sin depender del texto.
                 Button {
                     if saveProgress(reportErrors: true) { dismiss() }
                 } label: {
-                    Label(issue?.series?.title ?? importedFile?.displayName ?? "Volver",
-                          systemImage: "chevron.left")
-                        .font(.footnote)
+                    Image(systemName: "chevron.left")
+                        .font(.title3.weight(.semibold))
+                        .frame(width: 44, height: 44)
                 }
-                // El texto del botón es el título del cómic, así que sin
-                // etiqueta VoiceOver lo lee como si fuera un rótulo y no se
-                // entiende que sirva para salir del lector.
+                .foregroundStyle(.white)
+                .panelGlass(cornerRadius: 22,
+                            tint: .white.opacity(0.18),
+                            isInteractive: true,
+                            fallbackFill: .black.opacity(0.55),
+                            strokeColor: .white.opacity(0.18))
                 .accessibilityLabel("Cerrar el lector")
                 .accessibilityHint("Guarda tu progreso y vuelve atrás")
+
+                Text(issue?.series?.title ?? importedFile?.displayName ?? "Volver")
+                    .font(.footnote)
+                    .lineLimit(1)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .panelGlass(cornerRadius: 18,
+                                tint: .white.opacity(0.18),
+                                fallbackFill: .black.opacity(0.55),
+                                strokeColor: .white.opacity(0.18))
+                    .accessibilityHidden(true)
 
                 Spacer()
 
                 Text("Pág. \(displayedPage + 1) / \(max(totalPages, 1))")
                     .font(.footnote)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .panelGlass(cornerRadius: 18,
+                                tint: .white.opacity(0.18),
+                                fallbackFill: .black.opacity(0.55),
+                                strokeColor: .white.opacity(0.18))
                     .accessibilityLabel("Página \(displayedPage + 1) de \(max(totalPages, 1))")
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .panelGlass(cornerRadius: 18,
-                        tint: .white.opacity(0.18),
-                        fallbackFill: .black.opacity(0.55),
-                        strokeColor: .white.opacity(0.18))
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
@@ -381,35 +401,26 @@ private final class SpreadLayoutCache {
 
 /// Un pliego: una página, o dos lado a lado en iPad apaisado.
 ///
-/// El zoom SE MANTIENE al soltar los dedos. En la primera versión volvía a 1 en
-/// `onEnded`, lo que hacía imposible detenerse en una viñeta: justo lo que se
-/// espera de un lector de cómics. Al ampliar se habilita el arrastre y se le da
-/// prioridad sobre el paso de página del `TabView`.
+/// El zoom y el arrastre los gestiona `ZoomableSpreadView` (un
+/// `UIScrollView` nativo), no gestos de SwiftUI a mano. El zoom SE MANTIENE
+/// al soltar los dedos porque `UIScrollView` lo guarda él mismo entre
+/// actualizaciones: justo lo que se espera de un lector de cómics.
 ///
 /// El zoom y el arrastre se aplican al pliego ENTERO, no a cada página por
 /// separado. Si cada página tuviera su propio zoom, ampliar una viñeta que
-/// cruza el lomo desencajaría las dos mitades.
+/// cruza el lomo desencajaría las dos mitades. Por eso las dos páginas de
+/// un pliego van dentro del mismo `UIScrollView`, una al lado de la otra.
 private struct SpreadView: View {
     let archive: any ComicArchive
     let spread: SpreadLayout.Spread
     let fillsWidth: Bool
 
-    private static let maximumZoom: CGFloat = 5
     private static let doubleTapZoom: CGFloat = 2.5
 
     @State private var images: [Int: UIImage] = [:]
-    @State private var zoom: CGFloat = 1
-    @State private var offset: CGSize = .zero
     @State private var failedPages: Set<Int> = []
     @State private var loadAttempt = 0
-
-    /// Estado transitorio del gesto: se descarta solo al levantar los dedos.
-    @GestureState private var pinch: CGFloat = 1
-    @GestureState private var drag: CGSize = .zero
-
-    private var effectiveZoom: CGFloat {
-        min(max(zoom * pinch, 1), Self.maximumZoom)
-    }
+    @State private var zoomController = SpreadZoomController(doubleTapZoom: SpreadView.doubleTapZoom)
 
     /// Se pinta el pliego en cuanto TODAS sus páginas están listas. Enseñar
     /// media doble página mientras carga la otra mitad produce un salto de
@@ -426,34 +437,17 @@ private struct SpreadView: View {
         GeometryReader { geometry in
             ZStack {
                 if isReady {
-                    HStack(spacing: 0) {
-                        ForEach(spread.pages, id: \.self) { page in
-                            if let image = images[page] {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .aspectRatio(contentMode: fillsWidth ? .fill : .fit)
-                            }
-                        }
-                    }
-                    .scaleEffect(effectiveZoom)
-                    .offset(x: offset.width + drag.width,
-                            y: offset.height + drag.height)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-                    // `.simultaneousGesture`, no `.gesture`: dentro de un
-                    // `TabView(.page)` el gesto de paso de página es del propio
-                    // `TabView`, y un `.gesture` normal puede perder la pugna por
-                    // el toque contra él en un iPhone (pantalla más estrecha, el
-                    // giro de página es más sensible). `.simultaneousGesture`
-                    // deja que el pellizco se reconozca A LA VEZ, así que el zoom
-                    // funciona también en iPhone, no solo en iPad.
-                    .simultaneousGesture(magnification(in: geometry.size))
-                    // Solo se roba el arrastre al TabView cuando hay zoom;
-                    // sin ampliar, deslizar sigue pasando de página.
-                    .highPriorityGesture(pan(in: geometry.size), including: zoom > 1 ? .all : .subviews)
-                    .onTapGesture(count: 2) { toggleZoom(in: geometry.size) }
-                    .accessibilityLabel(accessibilityLabel)
-                    .accessibilityHint("Pellizca para ampliar. Toca dos veces para alternar el zoom.")
+                    ZoomableSpreadView(images: spread.pages.compactMap { images[$0] },
+                                       fillsWidth: fillsWidth,
+                                       accessibilityLabel: accessibilityLabel,
+                                       accessibilityHint: "Pellizca para ampliar. Toca dos veces para alternar el zoom.",
+                                       zoomController: zoomController)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        // El doble toque sigue siendo un gesto de SwiftUI, en el
+                        // mismo punto de la jerarquía donde estaba antes: así se
+                        // mantiene la misma relación con el toque simple que
+                        // muestra u oculta los mandos en `ReaderView`.
+                        .onTapGesture(count: 2) { zoomController.toggleZoom() }
                 } else if hasFailed {
                     VStack(spacing: 12) {
                         Label("Página no disponible", systemImage: "exclamationmark.triangle")
@@ -498,79 +492,4 @@ private struct SpreadView: View {
         }
     }
 
-    // MARK: - Gestos
-
-    private func magnification(in size: CGSize) -> some Gesture {
-        MagnifyGesture()
-            .updating($pinch) { value, state, _ in
-                state = value.magnification
-            }
-            .onEnded { value in
-                zoom = min(max(zoom * value.magnification, 1), Self.maximumZoom)
-                if zoom == 1 {
-                    withAnimation(.snappy) { offset = .zero }
-                } else {
-                    offset = clamped(offset, in: size)
-                }
-            }
-    }
-
-    private func pan(in size: CGSize) -> some Gesture {
-        DragGesture()
-            .updating($drag) { value, state, _ in
-                state = zoom > 1 ? value.translation : .zero
-            }
-            .onEnded { value in
-                guard zoom > 1 else { return }
-                offset = clamped(CGSize(width: offset.width + value.translation.width,
-                                        height: offset.height + value.translation.height),
-                                 in: size)
-            }
-    }
-
-    private func toggleZoom(in size: CGSize) {
-        withAnimation(.snappy(duration: 0.25)) {
-            if zoom > 1 {
-                zoom = 1
-                offset = .zero
-            } else {
-                zoom = Self.doubleTapZoom
-            }
-        }
-    }
-
-    /// Tamaño real de la imagen dentro del marco, teniendo en cuenta el
-    /// recorte de "Ajustar ancho" (`aspectRatio(.fill)`).
-    ///
-    /// En página completa la imagen siempre cabe entera dentro del marco y
-    /// coincide con `size`. En "Ajustar ancho", en cambio, la imagen YA
-    /// desborda el marco antes de aplicar ningún zoom (es lo que recorta los
-    /// márgenes). Si `clamped` calculara sus límites a partir de `size` en
-    /// vez de este tamaño real, el margen de arrastre se quedaría corto y,
-    /// al ampliar, no dejaría desplazarse lo bastante para llegar a los
-    /// bordes ya recortados de la página (por ejemplo, la primera viñeta,
-    /// pegada arriba).
-    private func renderedContentSize(in size: CGSize) -> CGSize {
-        guard fillsWidth, spread.pages.count == 1,
-              let page = spread.pages.first, let image = images[page],
-              image.size.width > 0, image.size.height > 0 else {
-            return size
-        }
-        let imageAspect = image.size.width / image.size.height
-        let frameAspect = size.width / size.height
-        if imageAspect > frameAspect {
-            return CGSize(width: size.height * imageAspect, height: size.height)
-        } else {
-            return CGSize(width: size.width, height: size.width / imageAspect)
-        }
-    }
-
-    /// Impide que el pliego se arrastre fuera de la pantalla y deje un hueco negro.
-    private func clamped(_ proposed: CGSize, in size: CGSize) -> CGSize {
-        let content = renderedContentSize(in: size)
-        let limitX = max((content.width * zoom - size.width) / 2, 0)
-        let limitY = max((content.height * zoom - size.height) / 2, 0)
-        return CGSize(width: min(max(proposed.width, -limitX), limitX),
-                      height: min(max(proposed.height, -limitY), limitY))
-    }
 }
