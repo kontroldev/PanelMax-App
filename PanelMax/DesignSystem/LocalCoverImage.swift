@@ -32,9 +32,13 @@ struct LocalCoverImage: View {
 
     private var height: CGFloat { width * 3 / 2 }
 
+    /// Portada decodificada en segundo plano cuando no estaba ya en caché.
+    /// Ver `.task` más abajo: por qué no se decodifica directamente en `body`.
+    @State private var decoded: UIImage?
+
     var body: some View {
         ZStack {
-            if let url, let uiImage = Self.cachedImage(at: url) {
+            if let url, let uiImage = Self.cachedImageIfPresent(at: url) ?? decoded {
                 Image(uiImage: uiImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -53,6 +57,25 @@ struct LocalCoverImage: View {
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(Theme.hairline, lineWidth: 0.5)
+        }
+        // Solo entra aquí si `cachedImageIfPresent` ya ha fallado arriba: una
+        // portada cacheada no pasa nunca por esta tarea, así que volver a una
+        // fila ya vista sigue siendo instantáneo y sin parpadeo, exactamente
+        // como antes. La tarea solo existe para el fallo de caché: leer el
+        // JPEG de disco y decodificarlo es justo el trabajo que antes se hacía
+        // DENTRO de `body`, en el hilo principal, para cada portada nueva que
+        // entraba en pantalla — con una biblioteca grande, decenas de esas
+        // decodificaciones síncronas de golpe al arrancar son lo que se nota
+        // como lentitud. Aquí se reparte en tareas en segundo plano y la
+        // portada aparece en cuanto está lista, sin bloquear el primer fotograma.
+        .task(id: url) {
+            guard let url, Self.cachedImageIfPresent(at: url) == nil else { return }
+            let image = await Task.detached(priority: .utility) {
+                Self.decodeFromDisk(at: url)
+            }.value
+            guard !Task.isCancelled else { return }
+            if let image { Self.store(image, for: url) }
+            decoded = image
         }
     }
 
@@ -73,18 +96,24 @@ struct LocalCoverImage: View {
         return cache
     }()
 
+    /// Solo consulta la caché en memoria: ni toca disco ni decodifica nada,
+    /// así que es seguro llamarla directamente desde `body`.
+    private static func cachedImageIfPresent(at url: URL) -> UIImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
     /// Es seguro cachear por URL sin invalidación aparte: `ThumbnailStore`
     /// escribe cada portada con un nombre de archivo nuevo (UUID) cada vez
     /// que se genera o se reemplaza una, así que una portada que cambia
     /// siempre trae una URL distinta. La antigua, huérfana, se borra por su
     /// lado (ver `ThumbnailStore.delete`); nunca hay dos contenidos distintos
     /// bajo la misma URL.
-    private static func cachedImage(at url: URL) -> UIImage? {
-        let key = url as NSURL
-        if let cached = cache.object(forKey: key) { return cached }
-        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+    nonisolated private static func decodeFromDisk(at url: URL) -> UIImage? {
+        UIImage(contentsOfFile: url.path)
+    }
+
+    private static func store(_ image: UIImage, for url: URL) {
         let decodedBytes = Int(image.size.width * image.scale * image.size.height * image.scale * 4)
-        cache.setObject(image, forKey: key, cost: decodedBytes)
-        return image
+        cache.setObject(image, forKey: url as NSURL, cost: decodedBytes)
     }
 }

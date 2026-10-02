@@ -132,6 +132,40 @@ red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
 
+### En desarrollo — 1 de octubre de 2026
+
+**Rendimiento**
+
+- Zoom y arrastre del lector reescritos sobre `UIScrollView` nativo
+  (`ZoomableSpreadView`), en vez de gestos de SwiftUI hechos a mano encima
+  del `TabView` de páginas. Antes, cada fotograma del arrastre con zoom
+  obligaba a SwiftUI a reevaluar toda la vista del pliego y a arbitrar a
+  mano contra el gesto de pasar página; se notaba como tirones al
+  desplazarse con zoom activado, sobre todo en pantallas grandes (iPad
+  Pro). Ahora UIKit resuelve el pellizco, el arrastre y los límites de
+  forma nativa, igual que en Fotos o cualquier visor con zoom dentro de un
+  carrusel.
+- Arranque de la app: las cuatro pestañas (Inicio, Mi colección,
+  Biblioteca, Perfil) solo construyen su contenido real la primera vez que
+  se visitan (`LazyTabContent`, en `RootView`). Antes, `TabView` construía
+  también el contenido de alguna pestaña vecina a la activa aunque no se
+  hubiera abierto nunca, disparando sus consultas a SwiftData y
+  recalculando porcentajes y huecos de toda la colección sin necesidad.
+  Con una colección grande, ese trabajo de más es justo lo que se notaba
+  como un arranque lento.
+- Portadas (`LocalCoverImage`): la primera vez que se muestra una
+  miniatura que todavía no está en caché, la lectura del archivo y su
+  decodificación ya no se hacen en el hilo principal dentro de `body`,
+  sino en una tarea en segundo plano. Las portadas ya cacheadas (volver a
+  una fila ya vista) siguen apareciendo al instante, sin cambios.
+
+**Cambiado**
+
+- Botón de volver del lector: antes compartía área táctil con el título
+  del cómic, con lo que el objetivo real variaba según lo largo que fuera
+  el nombre. Ahora es un botón circular propio de 44×44 puntos con una
+  flecha más grande, siempre en el mismo sitio y fácil de acertar.
+
 ### En desarrollo — 29 de septiembre de 2026
 
 **Añadido**

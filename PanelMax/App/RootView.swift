@@ -34,19 +34,19 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            HomeView()
+            LazyTabContent { HomeView() }
                 .tabItem { Label("Inicio", systemImage: "house.fill") }
                 .tag(Tab.home)
 
-            CollectionView()
+            LazyTabContent { CollectionView() }
                 .tabItem { Label("Mi colección", systemImage: "books.vertical.fill") }
                 .tag(Tab.collection)
 
-            ImportedLibraryView()
+            LazyTabContent { ImportedLibraryView() }
                 .tabItem { Label("Biblioteca", systemImage: "square.and.arrow.down.on.square.fill") }
                 .tag(Tab.library)
 
-            SettingsView()
+            LazyTabContent { SettingsView() }
                 .tabItem { Label("Perfil", systemImage: "person.crop.circle") }
                 .tag(Tab.profile)
         }
@@ -71,4 +71,33 @@ struct RootView: View {
 #Preview {
     RootView(persistenceWarning: nil)
         .modelContainer(PreviewData.container)
+}
+
+/// Retrasa la construcción del contenido de una pestaña hasta que aparece de
+/// verdad en pantalla.
+///
+/// `TabView` no es tan perezoso como parece: a arrancar, construye también
+/// el `body` de alguna pestaña vecina a la seleccionada (se ha comprobado
+/// que pasa con "Mi colección" aunque la pestaña activa sea otra),
+/// probablemente para poder deslizar entre pestañas sin tirones. Eso
+/// significa que sus `@Query` se disparan y `CollectionSnapshot`/
+/// `HomeSnapshot` se calculan sobre TODA la colección aunque el usuario no
+/// esté mirando esa pestaña, y con una colección grande ese trabajo de
+/// fondo es justo lo que retrasa el primer fotograma. Envolviendo el
+/// contenido real en un `Color.clear` hasta el primer `onAppear` de verdad,
+/// esa pestaña no hace ningún trabajo hasta que el usuario la visita.
+private struct LazyTabContent<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+    @State private var hasAppeared = false
+
+    var body: some View {
+        Group {
+            if hasAppeared {
+                content()
+            } else {
+                Color.clear
+            }
+        }
+        .onAppear { hasAppeared = true }
+    }
 }
