@@ -30,6 +30,20 @@ struct LocalCoverImage: View {
     var width: CGFloat
     var cornerRadius: CGFloat = 8
 
+    /// Inicializador explícito y `nonisolated`: sin él, el memberwise
+    /// sintetizado queda aislado a `@MainActor` (como el resto del tipo, por
+    /// conformar `View`), y algunos llamadores construyen esta vista desde un
+    /// closure que el propio framework tipa como `@Sendable` — por ejemplo el
+    /// `label` de `PhotosPicker` en `SeriesDetailView`. Aquí solo se copian
+    /// valores simples (`URL`, `CGFloat`), así que no hace falta tocar el
+    /// actor principal para construir la estructura. Mismo patrón que
+    /// `ComicArchive.init(url:)`.
+    nonisolated init(url: URL?, width: CGFloat, cornerRadius: CGFloat = 8) {
+        self.url = url
+        self.width = width
+        self.cornerRadius = cornerRadius
+    }
+
     private var height: CGFloat { width * 3 / 2 }
 
     /// Portada decodificada en segundo plano cuando no estaba ya en caché.

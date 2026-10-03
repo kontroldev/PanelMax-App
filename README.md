@@ -27,7 +27,8 @@ remoto, sin cuenta y sin compras.
   posición de lectura conservada al rotar el dispositivo.
 - Portada automática por cómic, generada desde su propia primera página: no
   hace falta catálogo remoto para tener miniaturas.
-- Un cómic de bienvenida incluido, para que la biblioteca no empiece vacía.
+- Presentación de bienvenida en el primer arranque, que explica qué hace la
+  app antes de que haya nada importado.
 - Exportar la colección catalogada a un archivo, como única copia de
   seguridad posible sin iCloud ni cuenta.
 - Accesibilidad: tipografías escalables con Dynamic Type, filas y controles
@@ -111,8 +112,8 @@ se comprueba en tiempo de compilación, no como avisos.
 1. Clona el repositorio y abre `PanelMax.xcodeproj`.
 2. Xcode resolverá automáticamente ZIPFoundation, fijado exactamente en la
    versión 0.9.20.
-3. Ejecuta el esquema compartido `PanelMax`. Al primer arranque se importa un
-   cómic de ejemplo para que la biblioteca no empiece vacía.
+3. Ejecuta el esquema compartido `PanelMax`. Al primer arranque se muestra la
+   presentación de bienvenida; la biblioteca empieza vacía.
 4. Usa `⌘U` para ejecutar los tests.
 
 ## Pruebas y CI
@@ -124,13 +125,57 @@ La suite incluye pruebas para:
 - huecos de una serie, porcentaje de progreso y estados de colección;
 - que borrar una serie no borra el archivo importado que tenía vinculado;
 - progreso de lectura del archivo importado y escrituras SwiftData;
-- validación de rutas de archivo frente a nombres manipulados (`../`, separadores).
+- validación de rutas de archivo frente a nombres manipulados (`../`, separadores);
+- lectura de CBZ: orden natural de páginas, descarte de `__MACOSX`/`.DS_Store`,
+  archivos vacíos o corruptos y peticiones de páginas en paralelo;
+- importación: copia privada y miniatura, lotes mixtos que omiten lo no
+  compatible, y detección de duplicados sin dejar copias huérfanas en `Comics/`.
+
+Los CBZ de prueba se generan en cada test (`ComicFixtures.swift`) con
+ZIPFoundation: el repositorio no contiene archivos binarios de prueba.
 
 GitHub Actions (`.github/workflows/ci.yml`) ejecuta `PanelMaxTests` en un
 simulador y compila además la configuración Release. Ninguna prueba necesita
 red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
+
+### En desarrollo — 3 de octubre de 2026
+
+**Añadido**
+
+- Portada de la serie desde su propia ficha: se toca la portada (con un
+  icono de cámara) y se elige una imagen de la Fototeca, sin pasar por
+  "Editar serie". Se guarda al momento.
+- 15 tests nuevos para la mitad del producto que no tenía ninguno:
+  - `CBZArchiveTests` (8): orden natural de páginas, descarte de la basura
+    de macOS, ZIP sin imágenes, archivo corrupto, extensión no admitida,
+    página fuera de rango y extracción de varias páginas en paralelo.
+  - `LibraryImportTests` (7): copia privada con miniatura, el cómic sigue
+    abriéndose si se borra el original, lotes mixtos, lote sin nada válido,
+    reimportación, mismo archivo dos veces en un lote y duplicados con otra
+    capitalización. En todos los casos se comprueba que no quedan copias
+    huérfanas en `Documents/Comics`.
+
+**Cambiado**
+
+- Portadas más grandes en la cabecera de las series de Mi colección, en la
+  ficha de serie y en el formulario de serie, que pasa a ser una portada
+  grande que se toca para cambiarla.
+- Tarjeta de ejemplo de la colección en el onboarding: "Los Vengadores" y
+  "Spiderman" sustituidos por títulos inventados ("Cuervo Negro" y "La Liga
+  del Faro"). Son marcas registradas de terceros, y esa pantalla suele salir
+  en las capturas de la App Store (riesgo de rechazo por la guía 5.2.1).
+
+**Corregido**
+
+- Test de UI `testOnboardingCanBeSkipped` inestable: pulsaba la X antes de
+  que el onboarding terminara de presentarse. Ahora espera a que aparezca y
+  da más margen a la animación de cierre.
+- README: quitadas dos menciones al cómic de bienvenida incluido, que ya no
+  existe desde que lo sustituyó el onboarding.
+
+Balance: 92 tests en verde (antes 77, con uno fallando).
 
 ### En desarrollo — 1 de octubre de 2026
 
@@ -420,6 +465,11 @@ versiones para quien retome ese trabajo en una versión futura.
   en el campo "Privacy Policy URL" de App Store Connect.
 - [ ] Completar pruebas en dispositivo y localización.
 - [ ] Ampliar los UI Tests más allá del mínimo actual.
+- [x] Sin marcas registradas de terceros en el contenido visible de la app.
+- [ ] Notas para la revisión en App Store Connect con enlace a un CBZ y un
+  PDF de prueba libres de derechos: sin cómic de ejemplo incluido, el
+  revisor no tiene nada que abrir en un dispositivo limpio.
+- [ ] Revisar que las capturas de App Store no muestren portadas con copyright.
 - [ ] Responder el cuestionario de clasificación por edad en App Store Connect.
 - [ ] Declarar no-trader en la Digital Services Act (sin compras integradas).
 - [ ] Confirmar que el Bundle Identifier (`com.kontroldesignstudio.vine`)

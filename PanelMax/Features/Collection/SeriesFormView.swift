@@ -58,32 +58,41 @@ struct SeriesFormView: View {
         NavigationStack {
             Form {
                 Section("Portada (opcional)") {
-                    HStack(spacing: 12) {
-                        LocalCoverImage(url: coverImageURL, width: 64, cornerRadius: 6)
-                            .accessibilityHidden(true) // decorativa: los botones de al lado ya explican el estado
+                    VStack(spacing: 10) {
+                        // Calculados FUERA del closure de `PhotosPicker`: su
+                        // `label` lo tipa PhotosUI como `@Sendable`, y una
+                        // propiedad `@State` no se puede leer directamente
+                        // desde ahí. Valores locales, capturados por valor, no
+                        // tienen ese problema.
+                        let coverURL = coverImageURL
+                        let hasCover = coverImageFilename != nil
+                        let accentColor = Theme.accent
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            // Calculado FUERA del closure de `PhotosPicker`: su
-                            // `label` lo tipa PhotosUI como `@Sendable`, y una
-                            // propiedad `@State` no se puede leer directamente
-                            // desde ahí. Un `String` local, capturado por valor,
-                            // no tiene ese problema.
-                            let pickerLabel = coverImageFilename == nil ? "Elegir imagen" : "Cambiar imagen"
-                            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                                Text(pickerLabel)
-                            }
-                            .disabled(isPickingCover)
-
-                            if coverImageFilename != nil {
-                                Button("Quitar imagen", role: .destructive) {
-                                    replaceCoverImageFilename(with: nil)
-                                }
-                                .disabled(isPickingCover)
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                            ZStack(alignment: .bottomTrailing) {
+                                LocalCoverImage(url: coverURL, width: 120, cornerRadius: 10)
+                                Image(systemName: "camera.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.white)
+                                    .padding(6)
+                                    .background(accentColor, in: Circle())
+                                    .offset(x: 4, y: 4)
                             }
                         }
-                        Spacer()
+                        .buttonStyle(.plain)
+                        .disabled(isPickingCover)
+                        .accessibilityLabel(hasCover ? "Cambiar imagen de portada" : "Elegir imagen de portada")
+
+                        if hasCover {
+                            Button("Quitar imagen", role: .destructive) {
+                                replaceCoverImageFilename(with: nil)
+                            }
+                            .disabled(isPickingCover)
+                        }
                     }
+                    .frame(maxWidth: .infinity)
                 }
+                .listRowBackground(Color.clear)
 
                 Section("Serie") {
                     TextField("Título", text: $title)

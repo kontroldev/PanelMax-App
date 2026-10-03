@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import PhotosUI
 
 /// Ficha de una serie catalogada a mano.
 ///
@@ -25,6 +26,13 @@ struct SeriesDetailView: View {
     @State private var relinkTarget: LocalComicFile?
     @State private var showsRelinkImporter = false
     @Environment(\.dismiss) private var dismiss
+
+    /// Portada elegida directamente desde la ficha, sin pasar por "Editar
+    /// serie". Mismo atajo que ya tenía el formulario, pero aquí se escribe
+    /// al momento: no hay nada más en un formulario pendiente de guardar.
+    @State private var selectedCoverItem: PhotosPickerItem?
+    @State private var isPickingCover = false
+    @State private var pendingCoverTask: Task<Void, Never>?
 
     /// El ancho mínimo de cada cuadrito escala con el tamaño de texto: con
     /// Dynamic Type grande, un mínimo fijo de 64 puntos dejaría los números
@@ -95,6 +103,46 @@ struct SeriesDetailView: View {
                       allowedContentTypes: ImportedLibraryView.importableTypes) { result in
             handleRelink(result)
         }
+        // `PhotosPickerItem` solo entrega un identificador: la carga y el
+        // guardado en disco son asíncronos, así que van en `.onChange`. A
+        // diferencia de `SeriesFormView`, aquí no hay nada pendiente de
+        // guardar: se escribe directamente en el modelo en cuanto la imagen
+        // está lista.
+        .onChange(of: selectedCoverItem) { _, newItem in
+            guard let newItem else { return }
+            isPickingCover = true
+            pendingCoverTask?.cancel()
+            let oldCoverFilename = series.coverImageFilename
+            pendingCoverTask = Task {
+                defer {
+                    selectedCoverItem = nil // permite volver a elegir la misma foto más tarde
+                    isPickingCover = false
+                }
+                guard !Task.isCancelled,
+                      let data = try? await newItem.loadTransferable(type: Data.self),
+                      !Task.isCancelled,
+                      let image = UIImage(data: data),
+                      let resized = ImageResizer.jpegData(from: image),
+                      let newFilename = try? ThumbnailStore.save(resized) else {
+                    return
+                }
+                do {
+                    try store.updateSeries(series,
+                                           title: series.title,
+                                           publisher: series.publisher,
+                                           startYear: series.startYear,
+                                           totalIssues: series.totalIssues,
+                                           coverImageFilename: newFilename)
+                    // Solo se borra la anterior una vez el guardado ha
+                    // tenido éxito, igual que en `SeriesFormView.save()`.
+                    ThumbnailStore.delete(oldCoverFilename)
+                } catch {
+                    context.rollback()
+                    ThumbnailStore.delete(newFilename)
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
         .confirmationDialog("¿Eliminar esta serie?", isPresented: $confirmsDeletion, titleVisibility: .visible) {
             Button("Eliminar serie", role: .destructive) { deleteSeries() }
             Button("Cancelar", role: .cancel) {}
@@ -114,9 +162,29 @@ struct SeriesDetailView: View {
     // MARK: - Secciones
 
     private var headerCard: some View {
-        HStack(alignment: .top, spacing: 12) {
-            LocalCoverImage(url: series.coverImageURL, width: 64, cornerRadius: 8)
-                .accessibilityHidden(true) // decorativa: el título ya se anuncia
+        // Calculados FUERA del closure de `PhotosPicker`: su `label` lo tipa
+        // PhotosUI como `@Sendable`, y `series` no se puede leer directamente
+        // desde ahí. Valores locales, capturados por valor, no tienen ese
+        // problema (mismo patrón que `SeriesFormView`).
+        let coverURL = series.coverImageURL
+        let hasCover = series.coverImageFilename != nil
+        let accentColor = Theme.accent
+
+        return HStack(alignment: .top, spacing: 12) {
+            PhotosPicker(selection: $selectedCoverItem, matching: .images) {
+                ZStack(alignment: .bottomTrailing) {
+                    LocalCoverImage(url: coverURL, width: 88, cornerRadius: 10)
+                    Image(systemName: "camera.fill")
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(6)
+                        .background(accentColor, in: Circle())
+                        .offset(x: 4, y: 4)
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isPickingCover)
+            .accessibilityLabel(hasCover ? "Cambiar portada de la serie" : "Añadir portada a la serie")
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(series.title).font(.title3.weight(.bold))

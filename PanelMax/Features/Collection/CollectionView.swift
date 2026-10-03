@@ -215,7 +215,7 @@ struct CollectionView: View {
     /// render, justo lo que el snapshot existe para evitar.
     private func header(for group: CollectionSnapshot.Group) -> some View {
         HStack {
-            LocalCoverImage(url: group.series.coverImageURL, width: 28, cornerRadius: 4)
+            LocalCoverImage(url: group.series.coverImageURL, width: 44, cornerRadius: 6)
                 .accessibilityHidden(true) // decorativa: el título ya se anuncia
 
             Text(group.series.displayTitle)
