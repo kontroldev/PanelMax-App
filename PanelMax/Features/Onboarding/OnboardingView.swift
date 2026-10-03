@@ -224,9 +224,12 @@ private struct LibraryMockupCard: View {
 /// Vista previa no interactiva de `CollectionView`/`SeriesDetailView`: series
 /// con su barra de progreso, como aparecerían tras catalogar unos números.
 private struct CollectionMockupCard: View {
+    /// Títulos inventados a propósito: con series reales (Marvel, DC...) esta
+    /// pantalla, que suele salir en las capturas de la App Store, se expone a
+    /// un rechazo por propiedad intelectual (guía 5.2.1).
     private let series: [(name: String, progress: Double)] = [
-        ("Los Vengadores", 0.8),
-        ("Spiderman", 0.45)
+        ("Cuervo Negro", 0.8),
+        ("La Liga del Faro", 0.45)
     ]
 
     var body: some View {

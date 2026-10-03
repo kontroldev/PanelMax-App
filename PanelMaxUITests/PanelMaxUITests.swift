@@ -45,9 +45,15 @@ final class PanelMaxUITests: XCTestCase {
         app.launchArguments = ["-uiTestsInMemoryStore", "-uiTestsShowOnboarding"]
         app.launch()
 
-        app.buttons["Saltar la introducción"].firstMatch.tap()
+        // Se espera a que el onboarding esté en pantalla antes de pulsar la X:
+        // sin esto, en un arranque lento el toque llegaba antes de que el
+        // `fullScreenCover` terminara de presentarse y se perdía.
+        let skipButton = app.buttons["Saltar la introducción"].firstMatch
+        XCTAssertTrue(skipButton.waitForExistence(timeout: 5))
+        skipButton.tap()
 
-        XCTAssertTrue(app.buttons["Mi colección"].firstMatch.waitForExistence(timeout: 2))
+        // Margen para la animación de cierre del `fullScreenCover`.
+        XCTAssertTrue(app.buttons["Mi colección"].firstMatch.waitForExistence(timeout: 5))
     }
 
     /// Crea una serie desde cero, comprueba que aparece en la lista y la
