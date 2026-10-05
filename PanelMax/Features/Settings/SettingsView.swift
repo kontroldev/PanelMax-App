@@ -4,7 +4,7 @@ import SwiftData
 /// Perfil y ajustes.
 ///
 /// Sin catálogo ni suscripción, esta pantalla se reduce a lo que de verdad
-/// es: estadísticas de la colección, copia de seguridad y lo legal.
+/// es: estadísticas de la colección, exportación y lo legal.
 struct SettingsView: View {
 
     @Query(sort: \Series.title) private var series: [Series]
@@ -52,7 +52,11 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Copia de seguridad
+    // MARK: - Exportar colección
+
+    /// No se llama «Copia de seguridad» a propósito: la app todavía no puede
+    /// volver a importar este archivo, y llamarlo así hacía pensar que basta
+    /// con él para recuperar la colección en otro dispositivo.
 
     private var exportSection: some View {
         Section {
@@ -73,9 +77,9 @@ struct SettingsView: View {
                 .accessibilityHint("El archivo está listo. Elige dónde guardarlo o con qué app compartirlo.")
             }
         } header: {
-            Text("Copia de seguridad")
+            Text("Exportar colección")
         } footer: {
-            Text("\(AppInfo.displayName) no usa iCloud ni cuenta: esta exportación es tu única copia de la colección catalogada a mano. Los archivos importados no se incluyen, solo los datos de qué tienes y en qué estado.")
+            Text("Genera un archivo JSON con tus series y números: qué tienes y en qué estado. Puedes guardarlo en Archivos o compartirlo para tener tus datos fuera del dispositivo. Por ahora \(AppInfo.displayName) no puede volver a importarlo para restaurar la colección. Los cómics importados no se incluyen.")
         }
     }
 

@@ -25,6 +25,7 @@ struct ImportedLibraryView: View {
     @State private var errorMessage: String?
     @State private var skippedMessage: String?
     @State private var presentedFile: LocalComicFile?
+    @State private var showsSample = false
     @State private var query = ""
 
     // MARK: - Volver a enlazar
@@ -54,6 +55,14 @@ struct ImportedLibraryView: View {
                         Text("Importa un CBZ o PDF desde tu dispositivo para leerlo aquí.")
                     } actions: {
                         Button("Importar cómic") { importComic() }
+                            .buttonStyle(.borderedProminent)
+                        // Para probar el lector sin tener nada que importar
+                        // (el revisor de App Store, en un dispositivo limpio).
+                        // Solo con la biblioteca vacía: después ya sobra.
+                        if SampleComic.url != nil {
+                            Button("Abrir ejemplo") { showsSample = true }
+                                .accessibilityHint("Abre un cómic corto de muestra en el lector. No se añade a tu biblioteca.")
+                        }
                     }
                 } else if visible.isEmpty {
                     ContentUnavailableView.search(text: query)
@@ -114,6 +123,11 @@ struct ImportedLibraryView: View {
             }
             .fullScreenCover(item: $presentedFile) { file in
                 ReaderView(file: file)
+            }
+            .fullScreenCover(isPresented: $showsSample) {
+                if let url = SampleComic.url {
+                    ReaderView(sampleURL: url, title: SampleComic.title)
+                }
             }
             .task {
                 PendingComicDeletion.cleanup(

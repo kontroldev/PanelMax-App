@@ -29,8 +29,11 @@ remoto, sin cuenta y sin compras.
   hace falta catálogo remoto para tener miniaturas.
 - Presentación de bienvenida en el primer arranque, que explica qué hace la
   app antes de que haya nada importado.
-- Exportar la colección catalogada a un archivo, como única copia de
-  seguridad posible sin iCloud ni cuenta.
+- Cómic de ejemplo para probar el lector desde el primer momento («Abrir
+  ejemplo» en la Biblioteca vacía), sin que se añada a la Biblioteca.
+- Exportar la colección catalogada a un archivo JSON, la única forma de
+  sacarla del dispositivo sin iCloud ni cuenta. Todavía no se puede
+  restaurar desde la app (pendiente para la 1.1).
 - Accesibilidad: tipografías escalables con Dynamic Type, filas y controles
   descritos para VoiceOver, y elementos decorativos (portadas, chevrons)
   ocultos al lector de pantalla para no generar ruido.
@@ -113,7 +116,8 @@ se comprueba en tiempo de compilación, no como avisos.
 2. Xcode resolverá automáticamente ZIPFoundation, fijado exactamente en la
    versión 0.9.20.
 3. Ejecuta el esquema compartido `PanelMax`. Al primer arranque se muestra la
-   presentación de bienvenida; la biblioteca empieza vacía.
+   presentación de bienvenida; la biblioteca empieza vacía, con el botón
+   «Abrir ejemplo» para probar el lector.
 4. Usa `⌘U` para ejecutar los tests.
 
 ## Pruebas y CI
@@ -139,6 +143,31 @@ simulador y compila además la configuración Release. Ninguna prueba necesita
 red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
+
+### En desarrollo — 5 de octubre de 2026
+
+**Añadido**
+
+- Botón «Abrir ejemplo» en la Biblioteca vacía: abre un cómic corto de
+  muestra (`Sample-Comic.cbz`, dibujos propios generados con
+  `scripts/make_review_comic.swift`) para probar el lector sin importar
+  nada. Va dentro del paquete de la app y se abre en solo lectura: no se
+  añade a la Biblioteca ni guarda progreso, así que no se repite lo del
+  antiguo cómic de bienvenida que aparecía sin haberlo importado. Pensado
+  sobre todo para el revisor de App Store en un dispositivo limpio.
+- Notas para la revisión (`docs/review/APP_REVIEW_NOTES.md`): texto para
+  App Store Connect, CBZ y PDF de prueba, y el script que los genera.
+
+**Cambiado**
+
+- «Copia de seguridad» pasa a llamarse «Exportar colección» en Perfil. El
+  texto aclara que genera un JSON con series y números, y que por ahora no
+  se puede volver a importar para restaurar la colección. Antes decía que
+  era «tu única copia», y eso hacía pensar que bastaba para recuperarla en
+  otro dispositivo. La restauración queda pendiente para la 1.1.
+- En la Biblioteca vacía, «Importar cómic» es ahora el botón destacado.
+
+Balance: 92 tests en verde, sin cambios en la suite.
 
 ### En desarrollo — 3 de octubre de 2026
 
@@ -467,8 +496,10 @@ versiones para quien retome ese trabajo en una versión futura.
 - [ ] Ampliar los UI Tests más allá del mínimo actual.
 - [x] Sin marcas registradas de terceros en el contenido visible de la app.
 - [ ] Notas para la revisión en App Store Connect con enlace a un CBZ y un
-  PDF de prueba libres de derechos: sin cómic de ejemplo incluido, el
-  revisor no tiene nada que abrir en un dispositivo limpio.
+  PDF de prueba libres de derechos, para que el revisor pueda probar la
+  importación (el lector ya se prueba con «Abrir ejemplo»). Archivos y texto
+  listos en [`docs/review/`](docs/review/APP_REVIEW_NOTES.md); falta subirlos
+  a la web y a App Store Connect.
 - [ ] Revisar que las capturas de App Store no muestren portadas con copyright.
 - [ ] Responder el cuestionario de clasificación por edad en App Store Connect.
 - [ ] Declarar no-trader en la Digital Services Act (sin compras integradas).

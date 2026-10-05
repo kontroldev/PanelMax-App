@@ -1,9 +1,10 @@
 import Foundation
 import SwiftData
 
-/// Exporta la colección a JSON. Es la única copia de seguridad posible sin
-/// iCloud ni cuenta: si el usuario pierde el dispositivo, pierde la colección
-/// que catalogó a mano a menos que la haya exportado antes.
+/// Exporta la colección a JSON. Sin iCloud ni cuenta, es la única forma de
+/// sacar del dispositivo la colección catalogada a mano. Todavía no hay
+/// importación de vuelta (queda para la 1.1), así que en la interfaz se
+/// presenta como «Exportar colección», no como copia de seguridad.
 enum CollectionExporter {
 
     struct ExportedIssue: Codable {

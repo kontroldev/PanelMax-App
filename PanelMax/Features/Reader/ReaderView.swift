@@ -11,6 +11,11 @@ struct ReaderView: View {
     private let issue: Issue?
     private let importedFile: LocalComicFile?
 
+    /// Solo para el cómic de ejemplo (ver `SampleComic`): un archivo dentro
+    /// del paquete de la app, sin registro en SwiftData ni progreso guardado.
+    private let sampleURL: URL?
+    private let sampleTitle: String?
+
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -93,6 +98,8 @@ struct ReaderView: View {
     init(issue: Issue) {
         self.issue = issue
         self.importedFile = issue.file
+        self.sampleURL = nil
+        self.sampleTitle = nil
     }
 
     /// Los archivos importados también se pueden leer sin vincularlos antes a
@@ -100,6 +107,17 @@ struct ReaderView: View {
     init(file: LocalComicFile) {
         self.issue = file.issue
         self.importedFile = file
+        self.sampleURL = nil
+        self.sampleTitle = nil
+    }
+
+    /// Abre un archivo de solo lectura que no está en la biblioteca. Como no
+    /// hay `importedFile`, `saveProgress` no guarda nada al salir.
+    init(sampleURL: URL, title: String) {
+        self.issue = nil
+        self.importedFile = nil
+        self.sampleURL = sampleURL
+        self.sampleTitle = title
     }
 
     var body: some View {
@@ -185,7 +203,7 @@ struct ReaderView: View {
                 .accessibilityLabel("Cerrar el lector")
                 .accessibilityHint("Guarda tu progreso y vuelve atrás")
 
-                Text(issue?.series?.title ?? importedFile?.displayName ?? "Volver")
+                Text(issue?.series?.title ?? importedFile?.displayName ?? sampleTitle ?? "Volver")
                     .font(.footnote)
                     .lineLimit(1)
                     .padding(.horizontal, 14)
@@ -300,22 +318,36 @@ struct ReaderView: View {
     // MARK: - Acciones
 
     private func open() async {
-        guard let file = importedFile else {
-            openingError = "Este número no tiene ningún archivo importado. Impórtalo desde Biblioteca ▸ Importar cómic."
-            return
-        }
-
         do {
-            let url = try file.resolveURL()
+            let url: URL
+            let savedPage: Int
 
-            // Si iOS dio el marcador por obsoleto se regenera AQUÍ, dentro del
-            // alcance de seguridad. Antes se lanzaba `fileUnavailable` y el
-            // cómic quedaba inaccesible de forma permanente.
-            if file.needsBookmarkRefresh {
-                let didAccess = url.startAccessingSecurityScopedResource()
-                file.refreshBookmarkIfNeeded(from: url)
-                if didAccess { url.stopAccessingSecurityScopedResource() }
-                try? context.save()
+            if let sampleURL {
+                // El ejemplo vive en el paquete de la app: ni marcador que
+                // refrescar ni progreso anterior. Siempre empieza en la 1.
+                url = sampleURL
+                savedPage = 0
+            } else if let file = importedFile {
+                url = try file.resolveURL()
+
+                // Si iOS dio el marcador por obsoleto se regenera AQUÍ, dentro del
+                // alcance de seguridad. Antes se lanzaba `fileUnavailable` y el
+                // cómic quedaba inaccesible de forma permanente.
+                if file.needsBookmarkRefresh {
+                    let didAccess = url.startAccessingSecurityScopedResource()
+                    file.refreshBookmarkIfNeeded(from: url)
+                    if didAccess { url.stopAccessingSecurityScopedResource() }
+                    try? context.save()
+                }
+
+                // Los registros anteriores a la biblioteca propia solo tenían progreso
+                // en Issue; se conserva como compatibilidad al abrirlos por primera vez.
+                savedPage = file.lastReadAt == nil
+                    ? (issue?.progress?.currentPage ?? file.currentPage)
+                    : file.currentPage
+            } else {
+                openingError = "Este número no tiene ningún archivo importado. Impórtalo desde Biblioteca ▸ Importar cómic."
+                return
             }
 
             // Se calcula AQUÍ, no dentro de PDFArchive: esta función corre en
@@ -331,11 +363,6 @@ struct ReaderView: View {
             }.value
             guard !Task.isCancelled else { return }
             archive = opened
-            // Los registros anteriores a la biblioteca propia solo tenían progreso
-            // en Issue; se conserva como compatibilidad al abrirlos por primera vez.
-            let savedPage = file.lastReadAt == nil
-                ? (issue?.progress?.currentPage ?? file.currentPage)
-                : file.currentPage
             currentPage = min(max(savedPage, 0), max(opened.pageCount - 1, 0))
         } catch {
             openingError = error.localizedDescription
