@@ -89,14 +89,7 @@ struct AddIssuesView: View {
                     Button("Añadir") { add() }.disabled(!isValid)
                 }
             }
-            .alert("No se ha podido añadir", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { visible in if !visible { errorMessage = nil } }
-            )) {
-                Button("De acuerdo", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+            .messageAlert("No se ha podido añadir", message: $errorMessage)
         }
     }
 

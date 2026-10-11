@@ -126,7 +126,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Theme.sectionLabel("Continuar leyendo")
 
-                ScrollView(.horizontal, showsIndicators: false) {
+                ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 10) {
                         ForEach(unfinishedFiles) { file in
                             Button {
@@ -139,6 +139,7 @@ struct HomeView: View {
                         }
                     }
                 }
+                .scrollIndicators(.hidden)
             }
         }
     }
@@ -151,7 +152,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Theme.sectionLabel("Huecos en tus series")
 
-                ScrollView(.horizontal, showsIndicators: false) {
+                ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 10) {
                         ForEach(snapshot.missingHighlights) { gap in
                             NavigationLink {
@@ -159,7 +160,9 @@ struct HomeView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     ZStack(alignment: .topTrailing) {
-                                        LocalCoverImage(url: nil, width: cardWidth)
+                                        // La portada de la serie, si tiene; si no,
+                                        // el marcador gris de siempre.
+                                        LocalCoverImage(url: gap.series.coverImageURL, width: cardWidth)
                                             .accessibilityHidden(true)
                                         Text("FALTA")
                                             .font(.caption2.weight(.bold))
@@ -183,6 +186,7 @@ struct HomeView: View {
                         }
                     }
                 }
+                .scrollIndicators(.hidden)
             }
         }
     }

@@ -11,6 +11,13 @@ enum ThumbnailGenerator {
     /// Abre el archivo ya copiado, extrae su primera página y la reduce a un
     /// tamaño de miniatura. Nunca lanza: una portada que falla no debe impedir
     /// que la importación termine con éxito.
+    ///
+    /// `@concurrent` es imprescindible. Con «Approachable Concurrency» una
+    /// función `nonisolated async` se ejecuta en el actor de quien la llama, y
+    /// quien la llama es `LibraryStore` (`@MainActor`): sin esto, abrir el ZIP,
+    /// reducir la imagen y comprimirla a JPEG ocurría en el hilo principal,
+    /// una vez por cómic, y un lote grande congelaba la interfaz.
+    @concurrent
     nonisolated static func makeThumbnail(for url: URL) async -> Data? {
         guard let archive = try? ComicArchiveFactory.open(url: url) else { return nil }
         guard let page = await archive.page(at: 0) else { return nil }

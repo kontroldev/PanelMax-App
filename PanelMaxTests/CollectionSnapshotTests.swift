@@ -47,6 +47,16 @@ struct CollectionSnapshotTests {
         #expect(snapshot.groups.count == 1)
     }
 
+    @Test("La búsqueda ignora mayúsculas y tildes", arguments: ["SERIE", "série", "  serie  "])
+    func searchIgnoresCaseAndAccents(query: String) throws {
+        let context = ModelContext(try makeTestContainer())
+        let series = makeSeries(in: context, numbers: [])
+
+        let snapshot = CollectionSnapshot(series: [series], filter: .owned, query: query)
+
+        #expect(snapshot.groups.count == 1)
+    }
+
     @Test("La búsqueda descarta una serie vacía si el título no casa")
     func emptySeriesIsFilteredOutByQuery() throws {
         let context = ModelContext(try makeTestContainer())

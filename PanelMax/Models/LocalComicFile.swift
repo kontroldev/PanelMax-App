@@ -1,213 +1,217 @@
 import Foundation
 import SwiftData
 
-/// Un archivo CBZ o PDF que el usuario ha importado desde Archivos o iCloud Drive.
-///
-/// Importante para App Review y para tu tranquilidad legal: la app NO descarga
-/// cómics de ningún sitio. Solo abre lo que el usuario ya tiene en su dispositivo.
-@Model
-final class LocalComicFile {
+extension PanelMaxSchemaV1 {
 
-    var displayName: String = ""
-
-    /// Marcador de seguridad (security-scoped bookmark).
-    /// No se guarda la ruta: en iOS las rutas cambian entre lanzamientos y actualizaciones.
-    var bookmark: Data?
-
-    /// Copia interna del archivo dentro del contenedor de la app.
-    /// Alternativa al marcador cuando el usuario elige copiar el archivo a la app.
-    var localFilename: String?
-
-    /// El marcador resolvió pero iOS lo dio por obsoleto. No se persiste:
-    /// es una señal de una sesión concreta para regenerarlo tras leerlo.
-    @Transient
-    var needsBookmarkRefresh: Bool = false
-
-    var pageCount: Int = 0
-    var importedAt: Date = Date()
-    var fileSize: Int64 = 0
-
-    /// Miniatura generada a partir de la página 1 del propio archivo, en
-    /// `Documents/Covers`. Sin catálogo remoto es la única portada posible.
-    var thumbnailFilename: String?
-
-    /// Progreso propio del archivo. Es necesario porque un cómic importado puede
-    /// leerse sin estar vinculado a ningún número del catálogo.
-    var currentPage: Int = 0
-    var lastReadAt: Date?
-    var isFinished: Bool = false
-
-    /// Número del catálogo al que se ha vinculado, si el usuario lo ha emparejado.
-    var issue: Issue?
-
-    init(displayName: String, bookmark: Data? = nil, localFilename: String? = nil) {
-        self.displayName = displayName
-        self.bookmark = bookmark
-        self.localFilename = localFilename
-        self.importedAt = Date()
-    }
-
-    /// Carpeta privada donde viven las copias que sí pertenecen a PanelMax.
-    /// Nunca se elimina un archivo externo al borrar un registro de la biblioteca.
-    nonisolated static var comicsDirectory: URL {
-        URL.documentsDirectory.appending(path: "Comics", directoryHint: .isDirectory)
-    }
-
-    /// Crea la carpeta de cómics y la marca como excluida de la copia de seguridad.
+    /// Un archivo CBZ, PDF o EPUB que el usuario ha importado desde Archivos o iCloud Drive.
     ///
-    /// Sin esto, cada CBZ importado se sube a iCloud dentro del respaldo del
-    /// dispositivo. Apple lo trata como uso indebido del almacenamiento (una
-    /// biblioteca de 40 cómics puede ocupar varios GB del iCloud del usuario)
-    /// y es una causa habitual de rechazo. El contenido es recuperable: el
-    /// usuario conserva los originales en Archivos o iCloud Drive.
-    @discardableResult
-    nonisolated static func prepareComicsDirectory(using manager: FileManager = .default) throws -> URL {
-        let directory = comicsDirectory
-        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
-        try excludeFromBackup(directory)
-        return directory
-    }
+    /// Importante para App Review y para tu tranquilidad legal: la app NO descarga
+    /// cómics de ningún sitio. Solo abre lo que el usuario ya tiene en su dispositivo.
+    @Model
+    final class LocalComicFile {
 
-    /// Marca una URL para que no entre en la copia de seguridad de iCloud.
-    /// Excluir la carpeta basta: la exclusión se hereda por su contenido.
-    nonisolated static func excludeFromBackup(_ url: URL) throws {
-        var target = url
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try target.setResourceValues(values)
-    }
+        var displayName: String = ""
 
-    /// Carpeta privada de miniaturas. Igual que `Comics/`, excluida de la copia
-    /// de seguridad: son derivados que se pueden regenerar desde el archivo.
-    nonisolated static var coversDirectory: URL {
-        URL.documentsDirectory.appending(path: "Covers", directoryHint: .isDirectory)
-    }
+        /// Marcador de seguridad (security-scoped bookmark).
+        /// No se guarda la ruta: en iOS las rutas cambian entre lanzamientos y actualizaciones.
+        var bookmark: Data?
 
-    @discardableResult
-    nonisolated static func prepareCoversDirectory(using manager: FileManager = .default) throws -> URL {
-        let directory = coversDirectory
-        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
-        try excludeFromBackup(directory)
-        return directory
-    }
+        /// Copia interna del archivo dentro del contenedor de la app.
+        /// Alternativa al marcador cuando el usuario elige copiar el archivo a la app.
+        var localFilename: String?
 
-    /// Construye una URL interna y rechaza nombres manipulados o rutas que escapen
-    /// del directorio dado (por ejemplo, datos persistentes dañados con `../`).
-    /// Comparte la validación entre `Comics/` y `Covers/`: el riesgo de un
-    /// nombre de archivo manipulado es el mismo en ambos sitios.
-    nonisolated private static func safeStorageURL(for filename: String, in directory: URL) throws -> URL {
-        let leaf = (filename as NSString).lastPathComponent
-        guard !filename.isEmpty,
-              filename == leaf,
-              filename != ".",
-              filename != ".." else {
-            throw ComicArchiveError.fileUnavailable
+        /// El marcador resolvió pero iOS lo dio por obsoleto. No se persiste:
+        /// es una señal de una sesión concreta para regenerarlo tras leerlo.
+        @Transient
+        var needsBookmarkRefresh: Bool = false
+
+        var pageCount: Int = 0
+        var importedAt: Date = Date()
+        var fileSize: Int64 = 0
+
+        /// Miniatura generada a partir de la página 1 del propio archivo, en
+        /// `Documents/Covers`. Sin catálogo remoto es la única portada posible.
+        var thumbnailFilename: String?
+
+        /// Progreso propio del archivo. Es necesario porque un cómic importado puede
+        /// leerse sin estar vinculado a ningún número del catálogo.
+        var currentPage: Int = 0
+        var lastReadAt: Date?
+        var isFinished: Bool = false
+
+        /// Número del catálogo al que se ha vinculado, si el usuario lo ha emparejado.
+        var issue: Issue?
+
+        init(displayName: String, bookmark: Data? = nil, localFilename: String? = nil) {
+            self.displayName = displayName
+            self.bookmark = bookmark
+            self.localFilename = localFilename
+            self.importedAt = Date()
         }
 
-        let base = directory.standardizedFileURL.resolvingSymlinksInPath()
-        let candidate = base
-            .appending(path: filename, directoryHint: .notDirectory)
-            .standardizedFileURL
-            .resolvingSymlinksInPath()
-        let basePrefix = base.path.hasSuffix("/") ? base.path : base.path + "/"
-
-        guard candidate.path.hasPrefix(basePrefix) else {
-            throw ComicArchiveError.fileUnavailable
+        /// Carpeta privada donde viven las copias que sí pertenecen a PanelMax.
+        /// Nunca se elimina un archivo externo al borrar un registro de la biblioteca.
+        /// Cuelga de `StorageLocation.root` (`Documents`, salvo en los tests).
+        nonisolated static var comicsDirectory: URL {
+            StorageLocation.root.appending(path: "Comics", directoryHint: .isDirectory)
         }
-        return candidate
-    }
 
-    nonisolated static func storageURL(for filename: String) throws -> URL {
-        try safeStorageURL(for: filename, in: comicsDirectory)
-    }
+        /// Crea la carpeta de cómics y la marca como excluida de la copia de seguridad.
+        ///
+        /// Sin esto, cada CBZ importado se sube a iCloud dentro del respaldo del
+        /// dispositivo. Apple lo trata como uso indebido del almacenamiento (una
+        /// biblioteca de 40 cómics puede ocupar varios GB del iCloud del usuario)
+        /// y es una causa habitual de rechazo. El contenido es recuperable: el
+        /// usuario conserva los originales en Archivos o iCloud Drive.
+        @discardableResult
+        nonisolated static func prepareComicsDirectory(using manager: FileManager = .default) throws -> URL {
+            let directory = comicsDirectory
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try excludeFromBackup(directory)
+            return directory
+        }
 
-    nonisolated static func coverStorageURL(for filename: String) throws -> URL {
-        try safeStorageURL(for: filename, in: coversDirectory)
-    }
+        /// Marca una URL para que no entre en la copia de seguridad de iCloud.
+        /// Excluir la carpeta basta: la exclusión se hereda por su contenido.
+        nonisolated static func excludeFromBackup(_ url: URL) throws {
+            var target = url
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try target.setResourceValues(values)
+        }
 
-    /// URL de la miniatura, si existe y su nombre sigue siendo válido.
-    /// Nunca lanza: una portada es una mejora visual, no algo que deba
-    /// interrumpir el resto de la pantalla si falla.
-    var thumbnailURL: URL? {
-        guard let thumbnailFilename else { return nil }
-        return try? Self.coverStorageURL(for: thumbnailFilename)
-    }
+        /// Carpeta privada de miniaturas. Igual que `Comics/`, excluida de la copia
+        /// de seguridad: son derivados que se pueden regenerar desde el archivo.
+        nonisolated static var coversDirectory: URL {
+            StorageLocation.root.appending(path: "Covers", directoryHint: .isDirectory)
+        }
 
-    /// Devuelve la copia privada, si el registro usa una. No apunta nunca al
-    /// archivo original escogido en Archivos/iCloud Drive.
-    func localCopyURL() throws -> URL? {
-        guard let localFilename else { return nil }
-        return try Self.storageURL(for: localFilename)
-    }
+        @discardableResult
+        nonisolated static func prepareCoversDirectory(using manager: FileManager = .default) throws -> URL {
+            let directory = coversDirectory
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try excludeFromBackup(directory)
+            return directory
+        }
 
-    /// Devuelve la URL utilizable del archivo.
-    ///
-    /// Si viene de un marcador hay que llamar a `startAccessingSecurityScopedResource()`
-    /// antes de leerlo y a `stop...` al terminar. De eso se encarga `ComicArchive`.
-    func resolveURL() throws -> URL {
-        if let localURL = try localCopyURL() {
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory),
-                  !isDirectory.boolValue else {
+        /// Construye una URL interna y rechaza nombres manipulados o rutas que escapen
+        /// del directorio dado (por ejemplo, datos persistentes dañados con `../`).
+        /// Comparte la validación entre `Comics/` y `Covers/`: el riesgo de un
+        /// nombre de archivo manipulado es el mismo en ambos sitios.
+        nonisolated private static func safeStorageURL(for filename: String, in directory: URL) throws -> URL {
+            let leaf = (filename as NSString).lastPathComponent
+            guard !filename.isEmpty,
+                  filename == leaf,
+                  filename != ".",
+                  filename != ".." else {
                 throw ComicArchiveError.fileUnavailable
             }
-            return localURL
+
+            let base = directory.standardizedFileURL.resolvingSymlinksInPath()
+            let candidate = base
+                .appending(path: filename, directoryHint: .notDirectory)
+                .standardizedFileURL
+                .resolvingSymlinksInPath()
+            let basePrefix = base.path.hasSuffix("/") ? base.path : base.path + "/"
+
+            guard candidate.path.hasPrefix(basePrefix) else {
+                throw ComicArchiveError.fileUnavailable
+            }
+            return candidate
         }
 
-        guard let bookmark else {
-            throw ComicArchiveError.fileUnavailable
+        nonisolated static func storageURL(for filename: String) throws -> URL {
+            try safeStorageURL(for: filename, in: comicsDirectory)
         }
 
-        var isStale = false
-        let url = try URL(resolvingBookmarkData: bookmark,
-                          options: [],
-                          relativeTo: nil,
-                          bookmarkDataIsStale: &isStale)
-
-        // Un marcador obsoleto SIGUE resolviendo a una URL válida: iOS solo avisa
-        // de que conviene regenerarlo. Rechazarlo aquí dejaba el cómic inaccesible
-        // para siempre tras una actualización del sistema o del propio binario.
-        if isStale {
-            needsBookmarkRefresh = true
+        nonisolated static func coverStorageURL(for filename: String) throws -> URL {
+            try safeStorageURL(for: filename, in: coversDirectory)
         }
-        return url
-    }
 
-    /// Si el archivo se puede resolver ahora mismo. Nunca lanza: solo sirve
-    /// para decidir si la interfaz avisa de que hay que volver a enlazarlo
-    /// (marcador caducado tras reinstalar la app, o copia interna perdida en
-    /// una restauración de backup que no incluye `Comics/`).
-    var isAvailable: Bool {
-        (try? resolveURL()) != nil
-    }
-
-    /// Regenera el marcador tras acceder correctamente al archivo. Debe llamarse
-    /// dentro del alcance de seguridad, no después de liberarlo.
-    func refreshBookmarkIfNeeded(from url: URL) {
-        guard needsBookmarkRefresh else { return }
-        if let refreshed = try? url.bookmarkData() {
-            bookmark = refreshed
+        /// URL de la miniatura, si existe y su nombre sigue siendo válido.
+        /// Nunca lanza: una portada es una mejora visual, no algo que deba
+        /// interrumpir el resto de la pantalla si falla.
+        var thumbnailURL: URL? {
+            guard let thumbnailFilename else { return nil }
+            return try? Self.coverStorageURL(for: thumbnailFilename)
         }
-        needsBookmarkRefresh = false
-    }
 
-    /// Actualiza el estado de lectura con valores válidos para el archivo abierto.
-    func updateProgress(page: Int, totalPages: Int) {
-        guard totalPages > 0 else { return }
-        let clampedPage = min(max(page, 0), totalPages - 1)
-        self.currentPage = clampedPage
-        self.pageCount = totalPages
-        self.lastReadAt = .now
-        self.isFinished = clampedPage >= totalPages - 1
-    }
+        /// Devuelve la copia privada, si el registro usa una. No apunta nunca al
+        /// archivo original escogido en Archivos/iCloud Drive.
+        func localCopyURL() throws -> URL? {
+            guard let localFilename else { return nil }
+            return try Self.storageURL(for: localFilename)
+        }
 
-    var progressFraction: Double {
-        guard pageCount > 0, lastReadAt != nil else { return 0 }
-        return min(Double(currentPage + 1) / Double(pageCount), 1)
-    }
+        /// Devuelve la URL utilizable del archivo.
+        ///
+        /// Si viene de un marcador hay que llamar a `startAccessingSecurityScopedResource()`
+        /// antes de leerlo y a `stop...` al terminar. De eso se encarga `ComicArchive`.
+        func resolveURL() throws -> URL {
+            if let localURL = try localCopyURL() {
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory),
+                      !isDirectory.boolValue else {
+                    throw ComicArchiveError.fileUnavailable
+                }
+                return localURL
+            }
 
-    var progressDescription: String? {
-        guard pageCount > 0, lastReadAt != nil else { return nil }
-        return "Pág. \(currentPage + 1) / \(pageCount)"
+            guard let bookmark else {
+                throw ComicArchiveError.fileUnavailable
+            }
+
+            var isStale = false
+            let url = try URL(resolvingBookmarkData: bookmark,
+                              options: [],
+                              relativeTo: nil,
+                              bookmarkDataIsStale: &isStale)
+
+            // Un marcador obsoleto SIGUE resolviendo a una URL válida: iOS solo avisa
+            // de que conviene regenerarlo. Rechazarlo aquí dejaba el cómic inaccesible
+            // para siempre tras una actualización del sistema o del propio binario.
+            if isStale {
+                needsBookmarkRefresh = true
+            }
+            return url
+        }
+
+        /// Si el archivo se puede resolver ahora mismo. Nunca lanza: solo sirve
+        /// para decidir si la interfaz avisa de que hay que volver a enlazarlo
+        /// (marcador caducado tras reinstalar la app, o copia interna perdida en
+        /// una restauración de backup que no incluye `Comics/`).
+        var isAvailable: Bool {
+            (try? resolveURL()) != nil
+        }
+
+        /// Regenera el marcador tras acceder correctamente al archivo. Debe llamarse
+        /// dentro del alcance de seguridad, no después de liberarlo.
+        func refreshBookmarkIfNeeded(from url: URL) {
+            guard needsBookmarkRefresh else { return }
+            if let refreshed = try? url.bookmarkData() {
+                bookmark = refreshed
+            }
+            needsBookmarkRefresh = false
+        }
+
+        /// Actualiza el estado de lectura con valores válidos para el archivo abierto.
+        func updateProgress(page: Int, totalPages: Int) {
+            guard totalPages > 0 else { return }
+            let clampedPage = min(max(page, 0), totalPages - 1)
+            self.currentPage = clampedPage
+            self.pageCount = totalPages
+            self.lastReadAt = .now
+            self.isFinished = clampedPage >= totalPages - 1
+        }
+
+        var progressFraction: Double {
+            guard pageCount > 0, lastReadAt != nil else { return 0 }
+            return min(Double(currentPage + 1) / Double(pageCount), 1)
+        }
+
+        var progressDescription: String? {
+            guard pageCount > 0, lastReadAt != nil else { return nil }
+            return "Pág. \(currentPage + 1) / \(pageCount)"
+        }
     }
 }

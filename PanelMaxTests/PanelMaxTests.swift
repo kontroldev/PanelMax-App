@@ -178,6 +178,65 @@ struct CollectionStoreTests {
         #expect(issue.progress?.isFinished == true)
     }
 
+    @Test("Quitar un número de la colección lo deja como hueco, sin borrarlo")
+    func removeKeepsIssueAsGap() throws {
+        let container = try makeContainer()
+        let store = CollectionStore(context: ModelContext(container))
+        let series = try store.createSeries(title: "Serie")
+        let issue = try store.addIssue(number: "1", to: series)
+
+        try store.remove(issue)
+
+        #expect(issue.entry == nil)
+        #expect(series.issues?.count == 1)
+        #expect(store.entryCount() == 0)
+    }
+
+    @Test("Cambiar el estado y el formato de un número se guarda")
+    func setStateAndFormat() throws {
+        let container = try makeContainer()
+        let store = CollectionStore(context: ModelContext(container))
+        let series = try store.createSeries(title: "Serie")
+        let issue = try store.addIssue(number: "1", to: series, state: .owned, format: .physical)
+
+        try store.setState(.read, for: issue)
+        try store.setFormat(.digital, for: issue)
+
+        #expect(issue.entry?.state == .read)
+        #expect(issue.entry?.format == .digital)
+    }
+
+    @Test("Cambiar el estado de un hueco no crea una ficha nueva")
+    func setStateOnGapDoesNothing() throws {
+        let container = try makeContainer()
+        let store = CollectionStore(context: ModelContext(container))
+        let series = try store.createSeries(title: "Serie")
+        let issue = try store.addIssue(number: "1", to: series)
+        try store.remove(issue)
+
+        try store.setState(.wanted, for: issue)
+
+        #expect(issue.entry == nil)
+        #expect(store.entryCount() == 0)
+    }
+
+    @Test("Desvincular un cómic lo suelta del número sin borrarlo")
+    func unlinkKeepsFile() throws {
+        let container = try makeContainer()
+        let store = CollectionStore(context: ModelContext(container))
+        let series = try store.createSeries(title: "Serie")
+        let issue = try store.addIssue(number: "1", to: series)
+        let file = LocalComicFile(displayName: "Cómic", localFilename: "a.cbz")
+        store.context.insert(file)
+        try store.link(file, to: issue)
+
+        try store.unlink(file)
+
+        #expect(file.issue == nil)
+        #expect(issue.file == nil)
+        #expect(store.importedFileCount() == 1)
+    }
+
     private func makeContainer() throws -> ModelContainer {
         let schema = Schema.panelMax
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

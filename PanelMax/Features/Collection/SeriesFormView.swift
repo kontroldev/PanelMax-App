@@ -122,14 +122,7 @@ struct SeriesFormView: View {
                     Button("Guardar") { save() }.disabled(!isValid)
                 }
             }
-            .alert("No se ha podido guardar", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { visible in if !visible { errorMessage = nil } }
-            )) {
-                Button("De acuerdo", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+            .messageAlert("No se ha podido guardar", message: $errorMessage)
             // `PhotosPickerItem` solo entrega un identificador: la carga y
             // el guardado en disco son asíncronos, así que van en `.onChange`.
             .onChange(of: selectedPhotoItem) { _, newItem in

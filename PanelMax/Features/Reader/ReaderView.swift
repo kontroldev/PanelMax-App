@@ -19,6 +19,7 @@ struct ReaderView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.displayScale) private var displayScale
 
     @State private var archive: (any ComicArchive)?
     @State private var currentPage = 0
@@ -158,22 +159,18 @@ struct ReaderView: View {
                              fitsDouble: fitsDoublePage(in: geometry.size))
                 }
             }
+            // Dentro del `GeometryReader` a propósito: así `open` conoce el
+            // tamaño real de la ventana y puede elegir a qué resolución
+            // rasterizar los PDF sin preguntar a `UIScreen`.
+            .task { await open(viewSize: geometry.size) }
         }
         .statusBarHidden(!showsControls)
         .navigationBarBackButtonHidden()
-        .task { await open() }
         .onDisappear { saveProgress(reportErrors: false) }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { saveProgress(reportErrors: false) }
         }
-        .alert("No se ha podido guardar el progreso", isPresented: Binding(
-            get: { progressError != nil },
-            set: { visible in if !visible { progressError = nil } }
-        )) {
-            Button("De acuerdo", role: .cancel) {}
-        } message: {
-            Text(progressError ?? "")
-        }
+        .messageAlert("No se ha podido guardar el progreso", message: $progressError)
     }
 
     // MARK: - Mandos
@@ -281,12 +278,12 @@ struct ReaderView: View {
             .padding(.bottom, 14)
         }
         .foregroundStyle(.white)
-        .background(
+        .background {
             LinearGradient(colors: [.black.opacity(0.75), .clear, .black.opacity(0.75)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
-        )
+        }
         .transition(.opacity)
     }
 
@@ -317,7 +314,7 @@ struct ReaderView: View {
 
     // MARK: - Acciones
 
-    private func open() async {
+    private func open(viewSize: CGSize) async {
         do {
             let url: URL
             let savedPage: Int
@@ -350,17 +347,13 @@ struct ReaderView: View {
                 return
             }
 
-            // Se calcula AQUÍ, no dentro de PDFArchive: esta función corre en
-            // el actor principal (herencia del aislamiento por defecto del
-            // proyecto), que es el único sitio desde el que `UIScreen` puede
-            // leerse. `ComicArchiveFactory.open` es `nonisolated` a propósito
-            // para poder llamarse desde el `Task.detached` de abajo, así que
-            // el valor tiene que entrar ya calculado, no calcularse dentro.
-            let pdfTargetWidth = PDFArchive.preferredRenderWidth()
+            // Se calcula AQUÍ, con el tamaño de la vista y la escala de la
+            // pantalla donde se dibuja, no dentro de PDFArchive: el archivo
+            // se abre en segundo plano y no sabe nada de pantallas.
+            let pdfTargetWidth = PDFArchive.preferredRenderWidth(viewSize: viewSize,
+                                                                 displayScale: displayScale)
 
-            let opened = try await Task.detached(priority: .userInitiated) {
-                try ComicArchiveFactory.open(url: url, pdfTargetWidth: pdfTargetWidth)
-            }.value
+            let opened = try await ComicArchiveFactory.openInBackground(url: url, pdfTargetWidth: pdfTargetWidth)
             guard !Task.isCancelled else { return }
             archive = opened
             currentPage = min(max(savedPage, 0), max(opened.pageCount - 1, 0))

@@ -23,7 +23,9 @@ struct CollectionSnapshot {
     let groups: [Group]
 
     init(series: [Series], filter: CollectionState, query: String) {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // Sin `lowercased()`: `localizedStandardContains` ya ignora mayúsculas
+        // Y tildes, así que «accion» encuentra «Acción» y «vinas», «Viñas».
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         var groups: [Group] = []
 
         for serie in series {
@@ -49,11 +51,11 @@ struct CollectionSnapshot {
             matching.sort { ComicNumber.areInIncreasingOrder($0.number, $1.number) }
 
             if !normalizedQuery.isEmpty {
-                let seriesMatches = serie.title.lowercased().contains(normalizedQuery)
+                let seriesMatches = serie.title.localizedStandardContains(normalizedQuery)
                 if !seriesMatches {
                     matching = matching.filter {
-                        $0.number.lowercased().contains(normalizedQuery)
-                            || $0.title.lowercased().contains(normalizedQuery)
+                        $0.number.localizedStandardContains(normalizedQuery)
+                            || $0.title.localizedStandardContains(normalizedQuery)
                     }
                     // Si el título no casa, hace falta al menos un número que sí.
                     // Una serie vacía no tiene ninguno, así que aquí sí se va.

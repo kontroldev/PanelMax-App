@@ -98,7 +98,11 @@ final class PanelMaxUITests: XCTestCase {
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            // Almacén en memoria: medir el arranque no debe depender de lo
+            // que haya en la colección real del simulador, ni modificarla.
+            let app = XCUIApplication()
+            app.launchArguments = ["-uiTestsInMemoryStore"]
+            app.launch()
         }
     }
 }

@@ -24,7 +24,7 @@ struct OnboardingView: View {
         ),
         OnboardingPage(
             title: "Importa tus cómics",
-            subtitle: "Añade tus CBZ o PDF desde Archivos o iCloud Drive. \(AppInfo.displayName) guarda una copia privada para que sigan abriéndose aunque el original desaparezca.",
+            subtitle: "Añade tus CBZ, PDF o EPUB de cómic desde Archivos o iCloud Drive. \(AppInfo.displayName) guarda una copia privada para que sigan abriéndose aunque el original desaparezca.",
             content: .library
         ),
         OnboardingPage(
@@ -34,7 +34,7 @@ struct OnboardingView: View {
         ),
         OnboardingPage(
             title: "Lee a tu ritmo",
-            subtitle: "Pasa página, haz zoom o lee a doble página en iPad. Viñe recuerda dónde lo dejaste.",
+            subtitle: "Pasa página, haz zoom o lee a doble página en iPad. \(AppInfo.displayName) recuerda dónde lo dejaste.",
             content: .reader
         ),
         OnboardingPage(
@@ -122,32 +122,42 @@ private struct OnboardingPageView: View {
     let page: OnboardingPage
 
     var body: some View {
-        VStack(spacing: 28) {
-            Spacer(minLength: 0)
+        // `ScrollView` para que nada se corte con texto de accesibilidad o en
+        // un iPhone pequeño en horizontal: si no cabe, se desplaza. Cuando sí
+        // cabe, `defaultScrollAnchor(.center, for: .alignment)` lo centra en
+        // vertical, igual que hacían antes los `Spacer`.
+        ScrollView {
+            VStack(spacing: 28) {
+                ZStack {
+                    Circle()
+                        .fill(Theme.accent.opacity(0.12))
+                        .frame(width: 260, height: 260)
 
-            ZStack {
-                Circle()
-                    .fill(Theme.accent.opacity(0.12))
-                    .frame(width: 260, height: 260)
+                    content
+                }
+                // Ilustración decorativa: los textos de debajo ya lo explican.
+                // Sin esto, VoiceOver leía las maquetas («Cuervo Negro, 80 %»)
+                // como si fueran datos reales.
+                .accessibilityHidden(true)
 
-                content
+                VStack(spacing: 10) {
+                    Text(page.title)
+                        .font(.title.bold())
+                        .multilineTextAlignment(.center)
+
+                    Text(page.subtitle)
+                        .font(.body)
+                        .foregroundStyle(Theme.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12)
+                }
             }
-
-            VStack(spacing: 10) {
-                Text(page.title)
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-
-                Text(page.subtitle)
-                    .font(.body)
-                    .foregroundStyle(Theme.secondaryText)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 12)
-            }
-
-            Spacer(minLength: 0)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 24)
+        .scrollBounceBehavior(.basedOnSize)
+        .defaultScrollAnchor(.center, for: .alignment)
     }
 
     @ViewBuilder

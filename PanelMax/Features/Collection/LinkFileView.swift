@@ -25,7 +25,7 @@ struct LinkFileView: View {
                     ContentUnavailableView {
                         Label("No hay archivos sin vincular", systemImage: "link")
                     } description: {
-                        Text("Importa un CBZ o PDF desde Biblioteca y vuelve aquí para asociarlo a este número.")
+                        Text("Importa un CBZ, PDF o EPUB de cómic desde Biblioteca y vuelve aquí para asociarlo a este número.")
                     }
                 } else {
                     List(candidates) { file in
@@ -58,14 +58,7 @@ struct LinkFileView: View {
                     Button("Cancelar") { dismiss() }
                 }
             }
-            .alert("No se ha podido vincular", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { visible in if !visible { errorMessage = nil } }
-            )) {
-                Button("De acuerdo", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+            .messageAlert("No se ha podido vincular", message: $errorMessage)
         }
     }
 

@@ -25,14 +25,7 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Perfil")
-            .alert("No se ha podido exportar", isPresented: Binding(
-                get: { exportError != nil },
-                set: { visible in if !visible { exportError = nil } }
-            )) {
-                Button("De acuerdo", role: .cancel) {}
-            } message: {
-                Text(exportError ?? "")
-            }
+            .messageAlert("No se ha podido exportar", message: $exportError)
             .fullScreenCover(isPresented: $showsOnboarding) {
                 OnboardingView { showsOnboarding = false }
             }
@@ -41,15 +34,18 @@ struct SettingsView: View {
 
     // MARK: - Estadísticas
 
-    private var stats: (entries: Int, seriesCount: Int) {
-        (store.entryCount(), series.count)
-    }
+    /// Se cuenta al entrar en la pestaña, no dentro de `body`: `fetchCount` no
+    /// se actualiza solo, y la `@Query` de series no cambia cuando añades
+    /// números a una serie que ya existía, así que el total se quedaba
+    /// desfasado hasta que otra cosa redibujara la pantalla.
+    @State private var entryCount = 0
 
     private var statsSection: some View {
         Section("Tu colección") {
-            LabeledContent("Números guardados", value: "\(stats.entries)")
-            LabeledContent("Series catalogadas", value: "\(stats.seriesCount)")
+            LabeledContent("Números guardados", value: "\(entryCount)")
+            LabeledContent("Series catalogadas", value: "\(series.count)")
         }
+        .onAppear { entryCount = store.entryCount() }
     }
 
     // MARK: - Exportar colección

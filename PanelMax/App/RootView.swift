@@ -26,29 +26,32 @@ struct RootView: View {
     }
 
     /// Pestaña seleccionada. Se guarda para que la app vuelva donde estabas.
-    @AppStorage("selectedTab") private var selection: Tab = .home
+    @AppStorage("selectedTab") private var selection: RootTab = .home
 
-    enum Tab: String {
+    /// No se llama `Tab` para no chocar con el tipo `Tab` de SwiftUI. Los
+    /// valores en bruto no cambian, así que la pestaña guardada en
+    /// `@AppStorage` de versiones anteriores se sigue leyendo bien.
+    enum RootTab: String {
         case home, collection, library, profile
     }
 
     var body: some View {
         TabView(selection: $selection) {
-            LazyTabContent { HomeView() }
-                .tabItem { Label("Inicio", systemImage: "house.fill") }
-                .tag(Tab.home)
+            Tab("Inicio", systemImage: "house.fill", value: RootTab.home) {
+                LazyTabContent { HomeView() }
+            }
 
-            LazyTabContent { CollectionView() }
-                .tabItem { Label("Mi colección", systemImage: "books.vertical.fill") }
-                .tag(Tab.collection)
+            Tab("Mi colección", systemImage: "books.vertical.fill", value: RootTab.collection) {
+                LazyTabContent { CollectionView() }
+            }
 
-            LazyTabContent { ImportedLibraryView() }
-                .tabItem { Label("Biblioteca", systemImage: "square.and.arrow.down.on.square.fill") }
-                .tag(Tab.library)
+            Tab("Biblioteca", systemImage: "square.and.arrow.down.on.square.fill", value: RootTab.library) {
+                LazyTabContent { ImportedLibraryView() }
+            }
 
-            LazyTabContent { SettingsView() }
-                .tabItem { Label("Perfil", systemImage: "person.crop.circle") }
-                .tag(Tab.profile)
+            Tab("Perfil", systemImage: "person.crop.circle", value: RootTab.profile) {
+                LazyTabContent { SettingsView() }
+            }
         }
         .tint(Theme.accent)
         .task {

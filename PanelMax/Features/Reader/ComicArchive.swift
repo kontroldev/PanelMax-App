@@ -14,27 +14,55 @@ enum ComicArchiveError: LocalizedError {
     case tooManyPages
     case unsafeCompressedEntry
     case pageUnavailable(Int)
+    /// EPUB de texto (una novela) o con texto real encima del dibujo: solo
+    /// se admiten EPUB de cómic con una imagen por página (ver `EPUBPackage`).
+    case textEPUB
+    /// EPUB protegido con DRM: sus páginas están cifradas y no se pueden leer.
+    case protectedEPUB
+
+    /// Un EPUB bien formado que no se puede abrir por lo que contiene, no por
+    /// estar roto. La importación lo explica tal cual en vez de decir solo
+    /// «no es compatible».
+    nonisolated var isIncompatibleEPUB: Bool {
+        switch self {
+        case .textEPUB, .protectedEPUB: true
+        default: false
+        }
+    }
 
     var errorDescription: String? {
         switch self {
         case .fileUnavailable:   return "El archivo ya no está disponible en este dispositivo."
-        case .unsupportedFormat: return "Formato no admitido. \(AppInfo.displayName) abre CBZ y PDF."
+        case .unsupportedFormat: return "Formato no admitido. \(AppInfo.displayName) abre CBZ, PDF y EPUB de cómic."
         case .emptyArchive:      return "El archivo no contiene páginas."
         case .archiveTooLarge:   return "El archivo supera el tamaño máximo admitido de 2 GB."
         case .tooManyPages:      return "El archivo contiene demasiadas páginas para abrirlo de forma segura."
-        case .unsafeCompressedEntry: return "El CBZ contiene una página comprimida de tamaño peligroso."
+        case .unsafeCompressedEntry: return "El archivo contiene una página comprimida de tamaño peligroso."
         case .pageUnavailable(let page): return "No se ha podido mostrar la página \(page)."
+        case .textEPUB:
+            return "Es un EPUB de texto, como una novela, o con texto encima de los dibujos. \(AppInfo.displayName) abre EPUB de cómic con una imagen por página."
+        case .protectedEPUB:
+            return "Este EPUB está protegido con DRM (por ejemplo, si se compró en Apple Books o Kindle) y no se puede abrir. \(AppInfo.displayName) solo abre archivos sin protección."
         }
     }
 }
 
 /// Cualquier cosa de la que se puedan sacar páginas.
 ///
-/// El lector no sabe si detrás hay un ZIP o un PDF, y eso es lo que permite
-/// añadir CBR o carpetas de imágenes más adelante sin tocar la interfaz.
+/// El lector no sabe si detrás hay un ZIP, un PDF o un EPUB, y eso es lo que
+/// permite añadir formatos sin tocar la interfaz.
 protocol ComicArchive: AnyObject, Sendable {
     nonisolated var pageCount: Int { get }
     nonisolated func page(at index: Int) async -> UIImage?
+}
+
+/// Formatos de imagen que pueden ser una página, compartido por CBZ y EPUB.
+enum ComicPageImage {
+    nonisolated static let extensions: Set<String> = ["jpg", "jpeg", "png", "webp", "gif"]
+
+    nonisolated static func isSupported(_ path: String) -> Bool {
+        extensions.contains((path as NSString).pathExtension.lowercased())
+    }
 }
 
 // MARK: - Fábrica
@@ -69,6 +97,8 @@ enum ComicArchiveFactory {
         #if canImport(ZIPFoundation)
         case "cbz", "zip":
             return try CBZArchive(url: url, securityAccess: access)
+        case "epub":
+            return try EPUBArchive(url: url, securityAccess: access)
         #endif
         case "pdf":
             return try PDFArchive(url: url, targetWidth: pdfTargetWidth, securityAccess: access)
@@ -77,8 +107,19 @@ enum ComicArchiveFactory {
         }
     }
 
+    /// Igual que `open(url:pdfTargetWidth:)`, pero siempre fuera del hilo
+    /// principal: abrir un CBZ recorre todas sus entradas, y con un
+    /// recopilatorio grande eso se nota. El resultado (`any ComicArchive`) es
+    /// `Sendable`, así que puede volver sin problema a la vista que lo pidió.
+    @concurrent
+    nonisolated static func openInBackground(url: URL,
+                                             pdfTargetWidth: CGFloat = PDFArchive.defaultRenderWidth) async throws -> any ComicArchive {
+        try open(url: url, pdfTargetWidth: pdfTargetWidth)
+    }
+
     /// Valida el archivo durante la importación y devuelve sus páginas. Abrirlo
-    /// aquí evita guardar en la biblioteca PDFs/CBZ vacíos o corruptos.
+    /// aquí evita guardar en la biblioteca archivos vacíos, corruptos o, en el
+    /// caso de los EPUB, de texto o con DRM.
     nonisolated static func pageCount(at url: URL) throws -> Int {
         let archive = try open(url: url)
         return archive.pageCount
@@ -86,7 +127,10 @@ enum ComicArchiveFactory {
 }
 
 /// Conserva el permiso de una URL externa hasta que el archivo deja de usarse.
-nonisolated private final class SecurityScopedAccess: @unchecked Sendable {
+///
+/// `Sendable` a secas, sin `@unchecked`: solo guarda constantes (`let`) de
+/// tipos que ya son `Sendable`, así que el compilador puede comprobarlo solo.
+nonisolated final class SecurityScopedAccess: Sendable {
     private let url: URL
     private let didStart: Bool
 
@@ -105,50 +149,29 @@ nonisolated private final class SecurityScopedAccess: @unchecked Sendable {
 #if canImport(ZIPFoundation)
 /// CBZ: un ZIP con las páginas dentro, numeradas por nombre de archivo.
 ///
-/// CORRECCIÓN IMPORTANTE respecto a la primera versión: `TabView` precarga las
-/// páginas adyacentes, así que `page(at:)` se llama para dos o tres índices A LA VEZ.
-/// La primera versión lanzaba una `Task.detached` por página, y dos extracciones
-/// concurrentes sobre el mismo `Archive` son una carrera de datos: fallos aleatorios
-/// e imposibles de reproducir. Ahora todas las extracciones pasan por una cola en
-/// serie, y por eso la clase puede declararse `@unchecked Sendable` con la conciencia
-/// tranquila: el estado mutable compartido (el `Archive`) solo se toca desde la cola.
-nonisolated final class CBZArchive: ComicArchive, @unchecked Sendable {
+/// La extracción (cola en serie, caché y límites de seguridad) la hace
+/// `ZIPPageExtractor`, compartido con `EPUBArchive`. Aquí solo se decide qué
+/// imágenes son páginas y en qué orden van. Ya no necesita `@unchecked`:
+/// solo guarda constantes de tipos `Sendable`, y el compilador lo comprueba.
+nonisolated final class CBZArchive: ComicArchive {
 
-    private let archive: Archive
-    private let entries: [Entry]
+    private let extractor: ZIPPageExtractor
     private let securityAccess: SecurityScopedAccess
-
-    /// Única puerta de acceso al `Archive`. Ver el comentario de la clase.
-    private let extractionQueue = DispatchQueue(label: "com.raulgallego.panelmax.cbz",
-                                                qos: .userInitiated)
-
-    /// Caché de páginas ya descomprimidas. `NSCache` es seguro entre hilos.
-    /// Sin esto, pasar página atrás vuelve a descomprimir la imagen entera.
-    private let cache = NSCache<NSNumber, UIImage>()
-
-    /// Una sola imagen de cómic no debería necesitar 128 MB descomprimida. Este
-    /// límite también se comprueba durante la extracción por si el ZIP miente.
-    private static let maximumEntrySize: UInt64 = 128 * 1_024 * 1_024
-    private static let maximumExpandedArchiveSize: UInt64 = 4 * 1_024 * 1_024 * 1_024
-    private static let maximumPageCount = 10_000
-    private static let maximumArchiveEntryCount = 20_000
 
     fileprivate nonisolated init(url: URL, securityAccess: SecurityScopedAccess) throws {
         // API comprobada con ZIPFoundation 0.9.20 (última versión estable).
         let archive = try Archive(url: url, accessMode: .read)
 
-        // Se corta también el número total de entradas, no solo las imágenes:
-        // así un ZIP con millones de ficheros basura no agota memoria al filtrarlo.
         var scannedEntries = 0
         var entries: [Entry] = []
         for entry in archive {
             scannedEntries += 1
-            guard scannedEntries <= Self.maximumArchiveEntryCount else {
+            guard scannedEntries <= ZIPPageExtractor.maximumArchiveEntryCount else {
                 throw ComicArchiveError.tooManyPages
             }
             if entry.type == .file, Self.isImage(entry.path) {
                 entries.append(entry)
-                guard entries.count <= Self.maximumPageCount else {
+                guard entries.count <= ZIPPageExtractor.maximumPageCount else {
                     throw ComicArchiveError.tooManyPages
                 }
             }
@@ -156,65 +179,23 @@ nonisolated final class CBZArchive: ComicArchive, @unchecked Sendable {
         // Orden natural: sin esto, "pagina10" va antes que "pagina2".
         entries.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
 
-        guard !entries.isEmpty else { throw ComicArchiveError.emptyArchive }
-
-        var expandedSize: UInt64 = 0
-        for entry in entries {
-            let entrySize = UInt64(entry.uncompressedSize)
-            guard entrySize <= Self.maximumEntrySize else {
-                throw ComicArchiveError.unsafeCompressedEntry
-            }
-            let (newSize, overflow) = expandedSize.addingReportingOverflow(entrySize)
-            guard !overflow, newSize <= Self.maximumExpandedArchiveSize else {
-                throw ComicArchiveError.unsafeCompressedEntry
-            }
-            expandedSize = newSize
-        }
-
-        self.archive = archive
-        self.entries = entries
+        self.extractor = try ZIPPageExtractor(archive: archive,
+                                              pages: entries,
+                                              label: "com.raulgallego.panelmax.cbz")
         self.securityAccess = securityAccess
-        cache.countLimit = 6   // suficiente para ir y volver sin comerse la memoria
     }
 
-    nonisolated var pageCount: Int { entries.count }
+    nonisolated var pageCount: Int { extractor.pageCount }
 
     nonisolated func page(at index: Int) async -> UIImage? {
-        guard entries.indices.contains(index) else { return nil }
-
-        if let cached = cache.object(forKey: NSNumber(value: index)) { return cached }
-
-        let entry = entries[index]
-        let archive = self.archive
-
-        // Descomprimir es caro: fuera del hilo principal, y en serie (ver arriba).
-        let image: UIImage? = await withCheckedContinuation { continuation in
-            extractionQueue.async {
-                do {
-                    var data = Data()
-                    _ = try archive.extract(entry) { chunk in
-                        let remaining = Int(Self.maximumEntrySize) - data.count
-                        guard chunk.count <= remaining else {
-                            throw ComicArchiveError.unsafeCompressedEntry
-                        }
-                        data.append(chunk)
-                    }
-                    continuation.resume(returning: ImageDownsampler.image(from: data))
-                } catch {
-                    continuation.resume(returning: nil)
-                }
-            }
-        }
-
-        if let image { cache.setObject(image, forKey: NSNumber(value: index)) }
-        return image
+        await extractor.page(at: index)
     }
 
     nonisolated private static func isImage(_ path: String) -> Bool {
         // Los ZIP de macOS traen basura: __MACOSX, .DS_Store, ficheros ocultos.
         let name = (path as NSString).lastPathComponent
         guard !name.hasPrefix("."), !path.contains("__MACOSX") else { return false }
-        return ["jpg", "jpeg", "png", "webp", "gif"].contains((path as NSString).pathExtension.lowercased())
+        return ComicPageImage.isSupported(path)
     }
 }
 #endif
@@ -235,11 +216,9 @@ nonisolated final class PDFArchive: ComicArchive, @unchecked Sendable {
                                             qos: .userInitiated)
     private let cache = NSCache<NSNumber, UIImage>()
 
-    /// Ancho en píxeles al que se rasteriza cada página. Se calcula en el
-    /// hilo principal (ver `preferredRenderWidth()`) y llega aquí ya como un
-    /// número: `UIScreen` es una API aislada al actor principal, y esta
-    /// clase es `nonisolated` a propósito para poder descomprimir páginas en
-    /// segundo plano, así que el valor no puede leerse desde dentro.
+    /// Ancho en píxeles al que se rasteriza cada página. Lo calcula la vista
+    /// del lector a partir de su propio tamaño (ver `preferredRenderWidth`) y
+    /// llega aquí ya como un número: esta clase no sabe nada de pantallas.
     private let targetWidth: CGFloat
 
     fileprivate nonisolated init(url: URL, targetWidth: CGFloat, securityAccess: SecurityScopedAccess) throws {
@@ -260,18 +239,18 @@ nonisolated final class PDFArchive: ComicArchive, @unchecked Sendable {
     /// el mismo valor que se usaba antes de tener en cuenta la pantalla real.
     nonisolated static let defaultRenderWidth: CGFloat = 1_290
 
-    /// Ancho de rasterizado ideal para la pantalla actual, con suelo de 1290 px
-    /// (para que un iPhone pequeño no renderice páginas pobres) y techo de
-    /// 2400 px, el mismo límite que usa `ImageDownsampler` para los CBZ.
+    /// Ancho de rasterizado ideal para la ventana del lector, con suelo de
+    /// 1290 px (para que un iPhone pequeño no renderice páginas pobres) y
+    /// techo de 2400 px, el mismo límite que usa `ImageDownsampler` para los CBZ.
     ///
-    /// `@MainActor` porque `UIScreen` solo puede leerse desde el hilo
-    /// principal. Hay que llamarla ANTES de abrir el archivo en segundo
-    /// plano (ver `ReaderView.open()`), no desde dentro de `PDFArchive`.
-    @MainActor
-    static func preferredRenderWidth() -> CGFloat {
-        let bounds = UIScreen.main.nativeBounds.size
-        let nativeWidth = max(bounds.width, bounds.height) // apaisado incluido
-        return min(max(nativeWidth, 1_290), 2_400)
+    /// Recibe el tamaño de la vista (en puntos) y la escala de la pantalla
+    /// en la que se dibuja, en vez de consultar `UIScreen.main`: esa API está
+    /// obsoleta y, en iPad con varias ventanas o con una pantalla externa,
+    /// puede devolver la pantalla equivocada. Se usa el lado más largo para
+    /// que girar el dispositivo no deje páginas ya renderizadas pequeñas.
+    nonisolated static func preferredRenderWidth(viewSize: CGSize, displayScale: CGFloat) -> CGFloat {
+        let longestSide = max(viewSize.width, viewSize.height) * max(displayScale, 1)
+        return min(max(longestSide, 1_290), 2_400)
     }
 
     nonisolated func page(at index: Int) async -> UIImage? {
