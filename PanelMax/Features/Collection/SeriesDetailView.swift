@@ -34,6 +34,11 @@ struct SeriesDetailView: View {
     @State private var isPickingCover = false
     @State private var pendingCoverTask: Task<Void, Never>?
 
+    /// Archivos vinculados que ahora mismo no se pueden abrir. Se calcula en
+    /// `refreshAvailability()`, no en `body`: `isAvailable` mira el disco, y
+    /// antes se consultaba por cada cuadrito y por cada menú contextual.
+    @State private var unavailableFileIDs: Set<PersistentIdentifier> = []
+
     /// El ancho mínimo de cada cuadrito escala con el tamaño de texto: con
     /// Dynamic Type grande, un mínimo fijo de 64 puntos dejaría los números
     /// recortados. El máximo evita además que en un iPad de 13" salgan veinte
@@ -103,6 +108,10 @@ struct SeriesDetailView: View {
                       allowedContentTypes: ImportedLibraryView.importableTypes) { result in
             handleRelink(result)
         }
+        // Se recalcula al vincular, desvincular o volver a enlazar un archivo.
+        .task(id: (series.issues ?? []).map { $0.file?.localFilename }) {
+            refreshAvailability()
+        }
         // `PhotosPickerItem` solo entrega un identificador: la carga y el
         // guardado en disco son asíncronos, así que van en `.onChange`. A
         // diferencia de `SeriesFormView`, aquí no hay nada pendiente de
@@ -149,14 +158,7 @@ struct SeriesDetailView: View {
         } message: {
             Text("Se borrarán sus números y su progreso. Los cómics importados no se eliminan: seguirán disponibles en Biblioteca.")
         }
-        .alert("No se ha podido completar", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { visible in if !visible { errorMessage = nil } }
-        )) {
-            Button("De acuerdo", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
+        .messageAlert("No se ha podido completar", message: $errorMessage)
     }
 
     // MARK: - Secciones
@@ -254,10 +256,13 @@ struct SeriesDetailView: View {
             } else {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(issues) { issue in
-                        NumberChip(issue: issue)
+                        NumberChip(issue: issue, fileIsUnavailable: isUnavailable(issue.file))
                             .contextMenu { menu(for: issue) }
                     }
                 }
+                // Una serie puede tener cientos de cuadritos con Liquid Glass:
+                // agruparlos en un contenedor hace que se dibujen juntos.
+                .panelGlassContainer()
             }
         }
     }
@@ -289,7 +294,7 @@ struct SeriesDetailView: View {
         Divider()
 
         if let file = issue.file {
-            if file.isAvailable {
+            if !isUnavailable(file) {
                 Button {
                     presentedFile = file
                 } label: {
@@ -326,6 +331,18 @@ struct SeriesDetailView: View {
     }
 
     // MARK: - Acciones
+
+    /// Comprueba en disco, una sola vez por cambio, qué archivos vinculados a
+    /// esta serie no se pueden abrir.
+    private func refreshAvailability() {
+        let files = (series.issues ?? []).compactMap(\.file)
+        unavailableFileIDs = Set(files.filter { !$0.isAvailable }.map(\.persistentModelID))
+    }
+
+    private func isUnavailable(_ file: LocalComicFile?) -> Bool {
+        guard let file else { return false }
+        return unavailableFileIDs.contains(file.persistentModelID)
+    }
 
     private func deleteSeries() {
         // Se lee antes de borrar: una vez borrado el modelo, `series` ya no
@@ -379,6 +396,12 @@ struct SeriesDetailView: View {
 private struct NumberChip: View {
     let issue: Issue
 
+    /// El archivo puede estar vinculado pero haber perdido el acceso
+    /// (marcador caducado, copia interna perdida en una restauración de
+    /// backup): en ese caso no basta con mirar `issue.isReadable`. Llega ya
+    /// calculado desde la ficha, para no tocar el disco en cada redibujado.
+    let fileIsUnavailable: Bool
+
     private var state: CollectionState? { issue.entry?.state }
 
     private var background: Color {
@@ -395,14 +418,6 @@ private struct NumberChip: View {
         case .wanted:       Theme.premium
         case .none:         .primary
         }
-    }
-
-    /// El archivo puede estar vinculado pero haber perdido el acceso
-    /// (marcador caducado, copia interna perdida en una restauración de
-    /// backup): en ese caso no basta con mirar `issue.isReadable`.
-    private var fileIsUnavailable: Bool {
-        guard let file = issue.file else { return false }
-        return !file.isAvailable
     }
 
     private var accessibilityValue: String {
@@ -430,9 +445,10 @@ private struct NumberChip: View {
         .frame(minHeight: 44)
         .padding(.vertical, 4)
         .foregroundStyle(foreground)
+        // Sin `isInteractive`: tocar un cuadrito no hace nada (las acciones
+        // están en la pulsación larga), y el brillo de «pulsable» engañaba.
         .panelGlass(cornerRadius: 8,
                     tint: state == nil ? nil : background,
-                    isInteractive: true,
                     fallbackFill: background,
                     strokeColor: state == nil ? Theme.hairline : .clear)
         .accessibilityLabel("Número \(issue.number)")

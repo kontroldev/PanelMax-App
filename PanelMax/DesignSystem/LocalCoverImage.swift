@@ -82,11 +82,11 @@ struct LocalCoverImage: View {
         // decodificaciones síncronas de golpe al arrancar son lo que se nota
         // como lentitud. Aquí se reparte en tareas en segundo plano y la
         // portada aparece en cuanto está lista, sin bloquear el primer fotograma.
-        .task(id: url) {
+        // Prioridad `.utility`: las portadas no deben competir con lo que el
+        // usuario está tocando. `decodeFromDisk` la hereda de esta tarea.
+        .task(id: url, priority: .utility) {
             guard let url, Self.cachedImageIfPresent(at: url) == nil else { return }
-            let image = await Task.detached(priority: .utility) {
-                Self.decodeFromDisk(at: url)
-            }.value
+            let image = await Self.decodeFromDisk(at: url)
             guard !Task.isCancelled else { return }
             if let image { Self.store(image, for: url) }
             decoded = image
@@ -122,8 +122,18 @@ struct LocalCoverImage: View {
     /// siempre trae una URL distinta. La antigua, huérfana, se borra por su
     /// lado (ver `ThumbnailStore.delete`); nunca hay dos contenidos distintos
     /// bajo la misma URL.
-    nonisolated private static func decodeFromDisk(at url: URL) -> UIImage? {
-        UIImage(contentsOfFile: url.path)
+    ///
+    /// `UIImage(contentsOfFile:)` solo lee el archivo: la decodificación del
+    /// JPEG se aplaza hasta la primera vez que se pinta, y eso ocurre en el
+    /// hilo principal. `preparingForDisplay()` la fuerza aquí mismo, dentro de
+    /// la tarea en segundo plano, que es lo que se buscaba desde el principio.
+    ///
+    /// `@concurrent`: se ejecuta siempre fuera del hilo principal, aunque
+    /// quien la llama (la `.task` de la vista) esté en él.
+    @concurrent
+    nonisolated private static func decodeFromDisk(at url: URL) async -> UIImage? {
+        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+        return image.preparingForDisplay() ?? image
     }
 
     private static func store(_ image: UIImage, for url: URL) {

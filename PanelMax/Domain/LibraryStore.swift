@@ -61,9 +61,7 @@ struct LibraryStore {
         // interfaz principal que estuvieran pendientes de guardar.
         let container = context.container
 
-        let result = try await Task.detached(priority: .userInitiated) {
-            try ComicImportBatch.copy(urls)
-        }.value
+        let result = try await ComicImportBatch.copyInBackground(urls)
         var skipped = result.skipped
 
         // Firma (nombre + tamaño) de lo que ya hay en la biblioteca, para no
@@ -141,9 +139,7 @@ struct LibraryStore {
     /// existente: el número al que estaba vinculado y el progreso de lectura
     /// no se pierden.
     func relink(_ file: LocalComicFile, to url: URL) async throws {
-        let result = try await Task.detached(priority: .userInitiated) {
-            try ComicImportBatch.copy([url])
-        }.value
+        let result = try await ComicImportBatch.copyInBackground([url])
         guard let draft = result.drafts.first else {
             throw ComicImportError.noneImported(result.skipped)
         }

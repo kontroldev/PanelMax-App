@@ -25,6 +25,7 @@ struct ImportedLibraryView: View {
     @State private var errorMessage: String?
     @State private var skippedMessage: String?
     @State private var presentedFile: LocalComicFile?
+    @State private var showsSample = false
     @State private var query = ""
 
     // MARK: - Volver a enlazar
@@ -33,10 +34,17 @@ struct ImportedLibraryView: View {
 
     private var store: LibraryStore { LibraryStore(context: context) }
 
+    /// Archivos que ahora mismo no se pueden abrir (marcador caducado o copia
+    /// interna perdida). Se calcula en `refreshAvailability()`, no en `body`:
+    /// `isAvailable` mira el disco, y antes se consultaba hasta tres veces por
+    /// fila en cada redibujado.
+    @State private var unavailableFileIDs: Set<PersistentIdentifier> = []
+
     private var visibleFiles: [LocalComicFile] {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return files }
-        return files.filter { $0.displayName.lowercased().contains(normalized) }
+        // Ignora mayúsculas y tildes: «accion» encuentra «Acción».
+        return files.filter { $0.displayName.localizedStandardContains(normalized) }
     }
 
     var body: some View {
@@ -51,9 +59,17 @@ struct ImportedLibraryView: View {
                     ContentUnavailableView {
                         Label("No hay cómics importados", systemImage: "books.vertical")
                     } description: {
-                        Text("Importa un CBZ o PDF desde tu dispositivo para leerlo aquí.")
+                        Text("Importa un CBZ, PDF o EPUB de cómic desde tu dispositivo para leerlo aquí.")
                     } actions: {
                         Button("Importar cómic") { importComic() }
+                            .buttonStyle(.borderedProminent)
+                        // Para probar el lector sin tener nada que importar
+                        // (el revisor de App Store, en un dispositivo limpio).
+                        // Solo con la biblioteca vacía: después ya sobra.
+                        if SampleComic.url != nil {
+                            Button("Abrir ejemplo") { showsSample = true }
+                                .accessibilityHint("Abre un cómic corto de muestra en el lector. No se añade a tu biblioteca.")
+                        }
                     }
                 } else if visible.isEmpty {
                     ContentUnavailableView.search(text: query)
@@ -63,11 +79,12 @@ struct ImportedLibraryView: View {
                             Button {
                                 presentedFile = file
                             } label: {
-                                ImportedComicRow(file: file)
+                                ImportedComicRow(file: file,
+                                                 isAvailable: !unavailableFileIDs.contains(file.persistentModelID))
                             }
                             .buttonStyle(.plain)
                             .swipeActions(edge: .leading) {
-                                if !file.isAvailable {
+                                if unavailableFileIDs.contains(file.persistentModelID) {
                                     Button {
                                         relinkTarget = file
                                         showsRelinkImporter = true
@@ -115,40 +132,44 @@ struct ImportedLibraryView: View {
             .fullScreenCover(item: $presentedFile) { file in
                 ReaderView(file: file)
             }
+            .fullScreenCover(isPresented: $showsSample) {
+                if let url = SampleComic.url {
+                    ReaderView(sampleURL: url, title: SampleComic.title)
+                }
+            }
             .task {
                 PendingComicDeletion.cleanup(
                     protecting: Set(files.compactMap(\.localFilename))
                 )
             }
-            .alert("No se ha podido completar", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { visible in if !visible { errorMessage = nil } }
-            )) {
-                Button("De acuerdo", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
+            // Se recalcula al añadir, borrar o volver a enlazar un archivo:
+            // las tres cosas cambian la lista de nombres de copia interna.
+            .task(id: files.map(\.localFilename)) {
+                refreshAvailability()
             }
-            .alert("Importación completada", isPresented: Binding(
-                get: { skippedMessage != nil },
-                set: { visible in if !visible { skippedMessage = nil } }
-            )) {
-                Button("De acuerdo", role: .cancel) {}
-            } message: {
-                Text(skippedMessage ?? "")
-            }
+            .messageAlert("No se ha podido completar", message: $errorMessage)
+            .messageAlert("Importación completada", message: $skippedMessage)
         }
     }
 
     // MARK: - Importación
 
     static let importableTypes: [UTType] = {
-        var types: [UTType] = [.pdf, .zip]
+        // `.epub` solo deja elegir el archivo: si es de texto o tiene DRM,
+        // la importación lo rechaza explicando el motivo (ver `EPUBPackage`).
+        var types: [UTType] = [.pdf, .zip, .epub]
         if let cbz = UTType(filenameExtension: "cbz") { types.append(cbz) }
         return types
     }()
 
     private func importComic() {
         showsImporter = true
+    }
+
+    /// Comprueba en disco, una sola vez por cambio de la lista, qué archivos
+    /// no se pueden abrir.
+    private func refreshAvailability() {
+        unavailableFileIDs = Set(files.filter { !$0.isAvailable }.map(\.persistentModelID))
     }
 
     private func handleImport(_ result: Result<[URL], Error>) {
@@ -240,6 +261,9 @@ struct ImportedLibraryView: View {
 
 private struct ImportedComicRow: View {
     let file: LocalComicFile
+    /// Llega ya calculado desde la lista (ver `refreshAvailability()`), para
+    /// no tocar el disco cada vez que se redibuja la fila.
+    let isAvailable: Bool
 
     var body: some View {
         HStack(spacing: 12) {
@@ -268,7 +292,7 @@ private struct ImportedComicRow: View {
                         .tint(file.isFinished ? .green : Theme.accent)
                 }
 
-                if !file.isAvailable {
+                if !isAvailable {
                     Label("Archivo no disponible", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.red)
@@ -293,7 +317,7 @@ private struct ImportedComicRow: View {
         } else {
             parts.append("Sin empezar")
         }
-        if !file.isAvailable {
+        if !isAvailable {
             parts.append("Archivo no disponible, desliza para volver a enlazarlo")
         }
         return parts.joined(separator: ", ")

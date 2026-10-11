@@ -46,14 +46,7 @@ struct CollectionView: View {
         .fullScreenCover(item: $presentedIssue) { issue in
             ReaderView(issue: issue)
         }
-        .alert("No se ha podido actualizar la colección", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { visible in if !visible { errorMessage = nil } }
-        )) {
-            Button("De acuerdo", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
+        .messageAlert("No se ha podido actualizar la colección", message: $errorMessage)
     }
 
     /// Diseño de una sola columna (iPhone y iPad en ventana estrecha): lo de

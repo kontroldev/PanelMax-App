@@ -65,4 +65,17 @@ extension View {
                 }
         }
     }
+
+    /// Agrupa varias superficies `panelGlass` para que el sistema las dibuje
+    /// juntas, que es mucho más barato que dibujar cada una por separado.
+    /// `spacing: 0` evita que piezas vecinas se fundan entre sí en reposo.
+    /// En versiones anteriores a iOS 26 no hay cristal, así que no hace nada.
+    @ViewBuilder
+    func panelGlassContainer() -> some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: 0) { self }
+        } else {
+            self
+        }
+    }
 }

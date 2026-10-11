@@ -65,6 +65,16 @@ struct FileSafetyTests {
             _ = try file.resolveURL()
         }
     }
+
+    @Test("Durante los tests, los archivos nunca van a la carpeta Documents real")
+    func testsUseIsolatedStorage() {
+        // Garantía de `StorageLocation`: importar, borrar o limpiar la
+        // papelera en un test no puede tocar la biblioteca real de la app.
+        let documents = URL.documentsDirectory.standardizedFileURL.path
+
+        #expect(LocalComicFile.comicsDirectory.standardizedFileURL.path.hasPrefix(documents) == false)
+        #expect(LocalComicFile.coversDirectory.standardizedFileURL.path.hasPrefix(documents) == false)
+    }
 }
 
 /// Casos límite del orden natural que no cubría la suite original.
@@ -74,7 +84,7 @@ struct ComicNumberEdgeTests {
     @Test("El cero va antes que el uno")
     func zeroComesFirst() {
         #expect(ComicNumber.areInIncreasingOrder("0", "1"))
-        #expect(!ComicNumber.areInIncreasingOrder("1", "0"))
+        #expect(ComicNumber.areInIncreasingOrder("1", "0") == false)
     }
 
     @Test("Los negativos se ordenan por valor, no por texto")
@@ -85,13 +95,13 @@ struct ComicNumberEdgeTests {
     @Test("Un entero siempre precede a un especial")
     func integersBeforeSpecials() {
         #expect(ComicNumber.areInIncreasingOrder("999", "Anual 1"))
-        #expect(!ComicNumber.areInIncreasingOrder("Anual 1", "999"))
+        #expect(ComicNumber.areInIncreasingOrder("Anual 1", "999") == false)
     }
 
     @Test("Dos números iguales no se consideran en orden estricto")
     func equalNumbersAreNotIncreasing() {
-        #expect(!ComicNumber.areInIncreasingOrder("5", "5"))
-        #expect(!ComicNumber.areInIncreasingOrder("Anual", "Anual"))
+        #expect(ComicNumber.areInIncreasingOrder("5", "5") == false)
+        #expect(ComicNumber.areInIncreasingOrder("Anual", "Anual") == false)
     }
 
     @Test("Una lista vacía o de un elemento se ordena sin fallar")

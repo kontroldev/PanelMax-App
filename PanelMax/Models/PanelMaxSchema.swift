@@ -11,10 +11,19 @@ import SwiftData
 /// reales — que es exactamente el escenario que no puedes reproducir en el
 /// simulador.
 ///
+/// Los modelos viven DENTRO de `PanelMaxSchemaV1` (cada archivo de `Models/`
+/// los declara en un `extension PanelMaxSchemaV1`). Es lo que hace posible
+/// migrar: si `V1` apuntara a las clases que usa la app en cada momento, al
+/// crear una `V2` las dos versiones describirían los mismos modelos y SwiftData
+/// no sabría qué cambió. El nombre de cada tabla sigue siendo el de la clase
+/// («Series», «Issue»...), así que anidarlos no altera la base de datos.
+///
 /// Cuando cambies un modelo:
-/// 1. Duplica `V1` en un `V2` con los modelos nuevos.
+/// 1. Copia los modelos actuales en un `PanelMaxSchemaV2` y haz ahí los cambios.
+///    `V1` se queda congelado tal y como está.
 /// 2. Añade `V2` a `schemas` en `PanelMaxMigrationPlan`.
 /// 3. Declara la etapa (`.lightweight` o `.custom`) en `stages`.
+/// 4. Apunta los `typealias` de abajo a los modelos de `V2`.
 enum PanelMaxSchemaV1: VersionedSchema {
 
     static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
@@ -23,6 +32,14 @@ enum PanelMaxSchemaV1: VersionedSchema {
         [Series.self, Issue.self, CollectionEntry.self, ReadingProgress.self, LocalComicFile.self]
     }
 }
+
+// Nombres cortos para el resto de la app: las vistas y los stores siguen
+// escribiendo `Series` o `Issue` sin saber en qué versión del esquema viven.
+typealias Series = PanelMaxSchemaV1.Series
+typealias Issue = PanelMaxSchemaV1.Issue
+typealias CollectionEntry = PanelMaxSchemaV1.CollectionEntry
+typealias ReadingProgress = PanelMaxSchemaV1.ReadingProgress
+typealias LocalComicFile = PanelMaxSchemaV1.LocalComicFile
 
 /// Plan de migración de la base de datos local.
 enum PanelMaxMigrationPlan: SchemaMigrationPlan {

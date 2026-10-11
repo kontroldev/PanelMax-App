@@ -5,9 +5,12 @@ import Testing
 
 /// `LibraryStore.importFiles` es la puerta de entrada de todo cómic.
 ///
-/// A diferencia de `CBZArchiveTests`, esta suite SÍ escribe en
-/// `Documents/Comics` y `Documents/Covers` del proceso de tests, porque es
-/// justo lo que se quiere comprobar. Cada test borra lo que ha importado.
+/// A diferencia de `CBZArchiveTests`, esta suite SÍ escribe en `Comics/` y
+/// `Covers/`, porque es justo lo que se quiere comprobar. Durante los tests
+/// esas carpetas cuelgan de una carpeta temporal propia (ver
+/// `StorageLocation`), nunca de la `Documents` real de la app, así que un
+/// test interrumpido no deja nada en tu biblioteca. Aun así, cada test borra
+/// lo que ha importado para no influir en los demás.
 /// `.serialized` porque varios tests comparan el contenido de `Comics/`
 /// antes y después: dos importaciones en paralelo se pisarían la cuenta.
 @Suite("Importación de cómics", .serialized)
@@ -17,7 +20,7 @@ struct LibraryImportTests {
     // MARK: - Utilidades
 
     /// Borra las copias internas y miniaturas de lo importado en un test.
-    private func removeImportedCopies(in context: ModelContext) {
+    func removeImportedCopies(in context: ModelContext) {
         let files = (try? context.fetch(FetchDescriptor<LocalComicFile>())) ?? []
         for file in files {
             if let url = try? file.localCopyURL() {
@@ -27,7 +30,7 @@ struct LibraryImportTests {
         }
     }
 
-    private func importedFiles(in context: ModelContext) throws -> [LocalComicFile] {
+    func importedFiles(in context: ModelContext) throws -> [LocalComicFile] {
         try context.fetch(FetchDescriptor<LocalComicFile>())
     }
 

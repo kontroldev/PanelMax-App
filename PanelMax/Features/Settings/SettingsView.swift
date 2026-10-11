@@ -4,7 +4,7 @@ import SwiftData
 /// Perfil y ajustes.
 ///
 /// Sin catálogo ni suscripción, esta pantalla se reduce a lo que de verdad
-/// es: estadísticas de la colección, copia de seguridad y lo legal.
+/// es: estadísticas de la colección, exportación y lo legal.
 struct SettingsView: View {
 
     @Query(sort: \Series.title) private var series: [Series]
@@ -25,14 +25,7 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Perfil")
-            .alert("No se ha podido exportar", isPresented: Binding(
-                get: { exportError != nil },
-                set: { visible in if !visible { exportError = nil } }
-            )) {
-                Button("De acuerdo", role: .cancel) {}
-            } message: {
-                Text(exportError ?? "")
-            }
+            .messageAlert("No se ha podido exportar", message: $exportError)
             .fullScreenCover(isPresented: $showsOnboarding) {
                 OnboardingView { showsOnboarding = false }
             }
@@ -41,18 +34,25 @@ struct SettingsView: View {
 
     // MARK: - Estadísticas
 
-    private var stats: (entries: Int, seriesCount: Int) {
-        (store.entryCount(), series.count)
-    }
+    /// Se cuenta al entrar en la pestaña, no dentro de `body`: `fetchCount` no
+    /// se actualiza solo, y la `@Query` de series no cambia cuando añades
+    /// números a una serie que ya existía, así que el total se quedaba
+    /// desfasado hasta que otra cosa redibujara la pantalla.
+    @State private var entryCount = 0
 
     private var statsSection: some View {
         Section("Tu colección") {
-            LabeledContent("Números guardados", value: "\(stats.entries)")
-            LabeledContent("Series catalogadas", value: "\(stats.seriesCount)")
+            LabeledContent("Números guardados", value: "\(entryCount)")
+            LabeledContent("Series catalogadas", value: "\(series.count)")
         }
+        .onAppear { entryCount = store.entryCount() }
     }
 
-    // MARK: - Copia de seguridad
+    // MARK: - Exportar colección
+
+    /// No se llama «Copia de seguridad» a propósito: la app todavía no puede
+    /// volver a importar este archivo, y llamarlo así hacía pensar que basta
+    /// con él para recuperar la colección en otro dispositivo.
 
     private var exportSection: some View {
         Section {
@@ -73,9 +73,9 @@ struct SettingsView: View {
                 .accessibilityHint("El archivo está listo. Elige dónde guardarlo o con qué app compartirlo.")
             }
         } header: {
-            Text("Copia de seguridad")
+            Text("Exportar colección")
         } footer: {
-            Text("\(AppInfo.displayName) no usa iCloud ni cuenta: esta exportación es tu única copia de la colección catalogada a mano. Los archivos importados no se incluyen, solo los datos de qué tienes y en qué estado.")
+            Text("Genera un archivo JSON con tus series y números: qué tienes y en qué estado. Puedes guardarlo en Archivos o compartirlo para tener tus datos fuera del dispositivo. Por ahora \(AppInfo.displayName) no puede volver a importarlo para restaurar la colección. Los cómics importados no se incluyen.")
         }
     }
 

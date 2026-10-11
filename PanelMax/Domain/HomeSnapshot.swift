@@ -39,6 +39,15 @@ struct HomeSnapshot {
         let number: Int
         /// `persistentModelID` en lugar de `catalogID`: dos series sin id
         /// propio producían la misma clave y SwiftUI reciclaba mal las celdas.
-        var id: String { "\(series.persistentModelID.hashValue)-\(number)" }
+        ///
+        /// Se guarda el identificador entero, no su `hashValue`: dos valores
+        /// distintos pueden compartir hash, y con eso `ForEach` vería dos
+        /// huecos con la misma identidad.
+        var id: ID { ID(series: series.persistentModelID, number: number) }
+
+        struct ID: Hashable {
+            let series: PersistentIdentifier
+            let number: Int
+        }
     }
 }

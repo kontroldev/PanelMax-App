@@ -51,6 +51,10 @@ struct ComicImportBatchResult: Sendable {
 enum ComicImportError: LocalizedError {
     case unavailable(String)
     case unsupported(String)
+    /// El formato se admite, pero este archivo concreto no se puede abrir
+    /// por un motivo que hay que explicar (un EPUB de texto o con DRM, por
+    /// ejemplo). Un «no es compatible» genérico ahí desconcierta.
+    case incompatible(String, reason: String)
     case tooLarge(String)
     case batchTooLarge
     case insufficientSpace
@@ -69,7 +73,9 @@ enum ComicImportError: LocalizedError {
         case .unavailable(let name):
             return "No se puede acceder a «\(name)». Comprueba que siga disponible en Archivos o iCloud Drive."
         case .unsupported(let name):
-            return "«\(name)» no es un CBZ o PDF compatible."
+            return "«\(name)» no es un CBZ, PDF o EPUB de cómic compatible."
+        case .incompatible(let name, let reason):
+            return "«\(name)» no se puede importar. \(reason)"
         case .tooLarge(let name):
             return "«\(name)» supera el tamaño máximo de 2 GB por archivo."
         case .batchTooLarge:
@@ -100,6 +106,15 @@ enum ComicImportError: LocalizedError {
 /// ahí no hay un archivo culpable que aislar, es la selección entera la que
 /// no cabe.
 enum ComicImportBatch {
+
+    /// Igual que `copy(_:)`, pero siempre fuera del hilo principal: copiar y
+    /// validar archivos de hasta 2 GB no puede bloquear la interfaz.
+    /// `@concurrent` sustituye al `Task.detached` que había en cada llamador.
+    @concurrent
+    nonisolated static func copyInBackground(_ sources: [URL]) async throws -> ComicImportBatchResult {
+        try copy(sources)
+    }
+
     nonisolated static func copy(_ sources: [URL]) throws -> ComicImportBatchResult {
         let manager = FileManager.default
         // Crea la carpeta y la excluye de la copia de seguridad de iCloud.
@@ -119,7 +134,7 @@ enum ComicImportBatch {
             for source in sources {
                 let name = source.lastPathComponent
                 let ext = source.pathExtension.lowercased()
-                guard ["cbz", "zip", "pdf"].contains(ext) else {
+                guard ["cbz", "zip", "pdf", "epub"].contains(ext) else {
                     skipped.append(SkippedComicImport(name: name,
                                                         reason: ComicImportError.unsupported(name).errorDescription ?? ""))
                     continue
@@ -130,9 +145,18 @@ enum ComicImportBatch {
 
                 do {
                     var isDirectory: ObjCBool = false
-                    guard manager.fileExists(atPath: source.path, isDirectory: &isDirectory),
-                          !isDirectory.boolValue else {
+                    guard manager.fileExists(atPath: source.path, isDirectory: &isDirectory) else {
                         throw ComicImportError.unavailable(name)
+                    }
+                    if isDirectory.boolValue {
+                        // Apple Books guarda algunos EPUB descomprimidos, como
+                        // una carpeta. No es que el archivo falte: hay que
+                        // decir qué pasa, o el usuario lo buscará en vano.
+                        guard ext == "epub" else { throw ComicImportError.unavailable(name) }
+                        throw ComicImportError.incompatible(
+                            name,
+                            reason: "Es un EPUB guardado como carpeta. Expórtalo como archivo .epub y vuelve a importarlo."
+                        )
                     }
 
                     let attributes = try manager.attributesOfItem(atPath: source.path)
@@ -166,8 +190,13 @@ enum ComicImportBatch {
                     let pages: Int
                     do {
                         pages = try ComicArchiveFactory.pageCount(at: temporaryURL)
+                    } catch let archiveError as ComicArchiveError where archiveError.isIncompatibleEPUB {
+                        // EPUB válido, pero de texto o con DRM: se omite igual,
+                        // explicando el motivo concreto en vez del genérico.
+                        try? manager.removeItem(at: temporaryURL)
+                        throw ComicImportError.incompatible(name, reason: archiveError.errorDescription ?? "")
                     } catch {
-                        // No es un CBZ/PDF legible pese a la extensión: se
+                        // No es un archivo legible pese a la extensión: se
                         // limpia la copia parcial y se omite, no se aborta el lote.
                         try? manager.removeItem(at: temporaryURL)
                         throw ComicImportError.unsupported(name)

@@ -10,7 +10,7 @@ struct ReaderLayoutPolicyTests {
     func landscapePhoneStaysSinglePage() {
         let size = CGSize(width: 852, height: 393)
 
-        #expect(!ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: .phone))
+        #expect(ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: .phone) == false)
     }
 
     @Test("Un iPad horizontal ancho admite doble página")
@@ -24,7 +24,26 @@ struct ReaderLayoutPolicyTests {
     func narrowPadStaysSinglePage() {
         let size = CGSize(width: 650, height: 500)
 
-        #expect(!ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: .pad))
+        #expect(ReaderLayoutPolicy.fitsDoublePage(in: size, idiom: .pad) == false)
+    }
+}
+
+/// A qué resolución se rasterizan los PDF. Antes se leía de `UIScreen.main`
+/// (obsoleto); ahora sale del tamaño de la ventana del lector.
+@Suite("Resolución de los PDF")
+struct PDFRenderWidthTests {
+
+    @Test("Usa el lado más largo de la ventana, en píxeles, entre 1290 y 2400",
+          arguments: zip(
+              [CGSize(width: 1_000, height: 1_100),   // dentro del rango: 1100 × 2
+               CGSize(width: 1_100, height: 1_000),   // girado: mismo resultado
+               CGSize(width: 320, height: 568),       // iPhone pequeño: sube al suelo
+               CGSize(width: 1_032, height: 1_376),   // iPad de 13": baja al techo
+               .zero],                                // ventana todavía sin medir
+              [2_200, 2_200, 1_290, 2_400, 1_290] as [CGFloat]
+          ))
+    func renderWidth(viewSize: CGSize, expected: CGFloat) {
+        #expect(PDFArchive.preferredRenderWidth(viewSize: viewSize, displayScale: 2) == expected)
     }
 }
 

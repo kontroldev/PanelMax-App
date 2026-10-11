@@ -3,8 +3,8 @@
 *(nombre de proyecto interno en Xcode: PanelMax — ver nota en Arquitectura)*
 
 Aplicación iOS para catalogar una colección de cómics a mano y leer archivos
-propios en CBZ y PDF. Funciona por completo sin conexión: sin catálogo
-remoto, sin cuenta y sin compras.
+propios en CBZ, PDF y EPUB de cómic. Funciona por completo sin conexión: sin
+catálogo remoto, sin cuenta y sin compras.
 
 **Web oficial:** [vine.kontroldesignstudio.com](https://vine.kontroldesignstudio.com/)
 
@@ -20,7 +20,14 @@ remoto, sin cuenta y sin compras.
   total, para calcular huecos y porcentaje de la colección.
 - Añadir números uno a uno o por rango completo ("del 1 al 40" de una vez).
 - Marcar cada número como poseído, deseado o leído, en papel o en digital.
-- Importar, listar, abrir, vincular y eliminar archivos CBZ y PDF propios.
+- Importar, listar, abrir, vincular y eliminar archivos CBZ, PDF y EPUB de
+  cómic propios.
+- EPUB de cómic (una imagen por página, como se venden muchos cómics y
+  mangas digitales): las páginas siguen el orden de lectura del propio EPUB.
+  Los EPUB de texto (novelas), con texto encima de los dibujos o con DRM se
+  rechazan al importar con un aviso que explica el motivo.
+- Búsqueda en Mi colección y en la Biblioteca que ignora mayúsculas y
+  tildes («accion» encuentra «Acción»).
 - Leer con progreso, caché, reducción de imágenes grandes, zoom persistente
   por pellizco o doble toque, arrastre dentro de la página, y un deslizador
   para saltar directamente a una página.
@@ -31,8 +38,11 @@ remoto, sin cuenta y sin compras.
   hace falta catálogo remoto para tener miniaturas.
 - Presentación de bienvenida en el primer arranque, que explica qué hace la
   app antes de que haya nada importado.
-- Exportar la colección catalogada a un archivo, como única copia de
-  seguridad posible sin iCloud ni cuenta.
+- Cómic de ejemplo para probar el lector desde el primer momento («Abrir
+  ejemplo» en la Biblioteca vacía), sin que se añada a la Biblioteca.
+- Exportar la colección catalogada a un archivo JSON, la única forma de
+  sacarla del dispositivo sin iCloud ni cuenta. Todavía no se puede
+  restaurar desde la app (pendiente para la 1.1).
 - Accesibilidad: tipografías escalables con Dynamic Type, filas y controles
   descritos para VoiceOver, y elementos decorativos (portadas, chevrons)
   ocultos al lector de pantalla para no generar ruido.
@@ -66,6 +76,10 @@ la sincronización con iCloud, la vista guiada viñeta a viñeta, el escáner de
 códigos ni el uso compartido en familia. Volverán en versiones futuras
 cuando haya un servicio real detrás que los justifique.
 
+La lectura de libros en EPUB de texto (novelas, con tamaño de letra, temas
+e índice de capítulos) está prevista para la versión 2.0, y la lectura de
+manga de derecha a izquierda, para una versión posterior a la 1.0.
+
 ## Arquitectura
 
 > **Sobre el nombre**: la app se presenta a los usuarios como **Viñe**, pero
@@ -81,9 +95,15 @@ cuando haya un servicio real detrás que los justifique.
 | Interfaz | SwiftUI, `NavigationStack` y estado Observable |
 | Persistencia | SwiftData local; sin CloudKit |
 | Portadas | Generadas en el dispositivo desde la página 1 del propio archivo |
-| Lector | PDFKit, ImageIO y ZIPFoundation 0.9.20 |
+| Lector | PDFKit, ImageIO, `XMLParser` (índice de los EPUB) y ZIPFoundation 0.9.20 |
 | Pruebas | Swift Testing, sin dependencias externas ni acceso a red |
-| Concurrencia | Modo de lenguaje Swift 6, aislamiento `MainActor` por defecto |
+| Concurrencia | Modo de lenguaje Swift 6, aislamiento `MainActor` por defecto; trabajo pesado en funciones `@concurrent` |
+
+El lector solo habla con el protocolo `ComicArchive` («cuántas páginas hay»
+y «dame la página N»), con tres implementaciones: `CBZArchive`, `PDFArchive`
+y `EPUBArchive`. CBZ y EPUB comparten `ZIPPageExtractor` (cola en serie,
+caché y límites contra archivos manipulados); qué imagen va en cada página
+de un EPUB lo decide `EPUBPackage`, que es lógica pura y se prueba sin ZIP.
 
 `CollectionStore` centraliza todas las escrituras sobre la colección
 (crear series, añadir números por rango, cambiar estados, vincular
@@ -93,15 +113,18 @@ Si el almacén persistente no puede abrirse, la app no borra la colección:
 arranca con un contenedor temporal y muestra el problema.
 
 El esquema está versionado desde la versión 1 en `PanelMaxSchema.swift`, con
-un `SchemaMigrationPlan` ya conectado al contenedor. Cuando cambie un modelo
-hay que añadir una `V2` y su etapa de migración; el esquema activo se declara
-en un único sitio (`Schema.panelMax`) que comparten la app, las
-previsualizaciones y los tests.
+un `SchemaMigrationPlan` ya conectado al contenedor. Los modelos viven dentro
+de `PanelMaxSchemaV1` (con `typealias` para el resto de la app), de modo que
+la V1 queda congelada. Cuando cambie un modelo hay que copiarlos en una `V2`,
+añadir su etapa de migración y apuntar los `typealias` a la V2; el esquema
+activo se declara en un único sitio (`Schema.panelMax`) que comparten la app,
+las previsualizaciones y los tests.
 
 Los cómics importados viven en `Documents/Comics` y sus miniaturas en
 `Documents/Covers`, ambas excluidas de la copia de seguridad de iCloud: son
 archivos grandes (o regenerables) que no deben consumir la cuota de respaldo
-del usuario.
+del usuario. Durante los tests unitarios esas carpetas cuelgan de una carpeta
+temporal (`StorageLocation`), así que los tests nunca tocan la biblioteca real.
 
 ## Requisitos y ejecución
 
@@ -115,7 +138,8 @@ se comprueba en tiempo de compilación, no como avisos.
 2. Xcode resolverá automáticamente ZIPFoundation, fijado exactamente en la
    versión 0.9.20.
 3. Ejecuta el esquema compartido `PanelMax`. Al primer arranque se muestra la
-   presentación de bienvenida; la biblioteca empieza vacía.
+   presentación de bienvenida; la biblioteca empieza vacía, con el botón
+   «Abrir ejemplo» para probar el lector.
 4. Usa `⌘U` para ejecutar los tests.
 
 ## Pruebas y CI
@@ -131,16 +155,117 @@ La suite incluye pruebas para:
 - lectura de CBZ: orden natural de páginas, descarte de `__MACOSX`/`.DS_Store`,
   archivos vacíos o corruptos y peticiones de páginas en paralelo;
 - importación: copia privada y miniatura, lotes mixtos que omiten lo no
-  compatible, y detección de duplicados sin dejar copias huérfanas en `Comics/`.
+  compatible, y detección de duplicados sin dejar copias huérfanas en `Comics/`;
+- borrado reversible de cómics, limpieza de la papelera interna y volver a
+  enlazar un cómic perdido sin perder su progreso;
+- lectura de PDF y cálculo de su resolución según la ventana;
+- lectura de EPUB: orden del spine, imágenes en SVG, entidades HTML, y
+  rechazo de novelas, texto sobre los dibujos, DRM, imágenes remotas y rutas
+  que salen del archivo;
+- esquema de la base de datos: nombres de tablas estables y reapertura de un
+  almacén en disco con el plan de migración;
+- exportación de la colección a JSON y búsqueda sin tildes.
 
-Los CBZ de prueba se generan en cada test (`ComicFixtures.swift`) con
-ZIPFoundation: el repositorio no contiene archivos binarios de prueba.
+Los CBZ, PDF y EPUB de prueba se generan en cada test (`ComicFixtures.swift`):
+el repositorio no contiene archivos binarios de prueba.
 
 GitHub Actions (`.github/workflows/ci.yml`) ejecuta `PanelMaxTests` en un
 simulador y compila además la configuración Release. Ninguna prueba necesita
 red ni credenciales, porque la app tampoco las usa.
 
 ## Registro de cambios
+
+### Beta — 11 de octubre de 2026 (11/10/2026)
+
+**Añadido**
+
+- EPUB de cómic: se importan y se leen como cualquier CBZ (zoom, doble
+  página en iPad, progreso, portada automática y vincular a un número). Las
+  páginas siguen el orden de lectura del propio EPUB, y se admiten imágenes
+  en `<img>` y dentro de un SVG a pantalla completa.
+- Avisos claros al importar un EPUB que no se puede abrir, en vez del
+  genérico «no es compatible»: EPUB de texto (novelas) o con texto encima de
+  los dibujos, EPUB con DRM (Apple Books, Kindle) y EPUB guardados como
+  carpeta. El resto del lote se importa igualmente.
+- Portada de la serie en las tarjetas de «Huecos en tus series» de Inicio.
+- Tests nuevos para: EPUB (lectura, índice e importación), borrado reversible y
+  papelera interna, volver a enlazar, lectura de PDF, resolución de los PDF,
+  exportación a JSON, esquema y compatibilidad con datos ya guardados,
+  `CollectionStore` (quitar, estado, formato, desvincular) y búsqueda.
+
+**Cambiado**
+
+- Pestañas con la API `Tab` de SwiftUI en lugar de `tabItem`. La pestaña
+  guardada de versiones anteriores se sigue recordando.
+- La búsqueda de Mi colección y de la Biblioteca ignora mayúsculas y tildes.
+- La introducción se desplaza si no cabe (texto grande o iPhone pequeño en
+  horizontal), y sus ilustraciones de ejemplo quedan ocultas para VoiceOver.
+- Los números de una serie ya no brillan como si fueran pulsables: sus
+  acciones están en la pulsación larga.
+- El total de «Números guardados» en Perfil se recalcula al entrar.
+- Los PDF se rasterizan según el tamaño real de la ventana del lector, en
+  vez de `UIScreen.main` (obsoleto y poco fiable en iPad con varias ventanas).
+- Las nueve alertas de error usan un único modificador (`messageAlert`).
+- Textos de la interfaz actualizados: «CBZ, PDF o EPUB de cómic».
+
+**Rendimiento**
+
+- Importar un lote ya no congela la interfaz: la miniatura de cada cómic
+  (abrir el archivo, reducir la imagen y comprimirla) se generaba en el hilo
+  principal. Ahora va en segundo plano (`@concurrent`).
+- Las portadas se decodifican de verdad en segundo plano
+  (`preparingForDisplay()`); antes solo se leía el archivo y la
+  decodificación acababa en el hilo principal al pintarla.
+- La disponibilidad de cada archivo se comprueba en disco una vez por cambio,
+  no en cada redibujado de la Biblioteca y de la ficha de serie.
+- Los cuadritos de números con Liquid Glass se dibujan juntos dentro de un
+  `GlassEffectContainer`.
+- `Task.detached` sustituido por funciones `@concurrent` al importar, volver
+  a enlazar, abrir el lector y cargar portadas.
+
+**Corregido**
+
+- Base de datos preparada para migrar: los modelos pasan a vivir dentro de
+  `PanelMaxSchemaV1`, que queda congelada. Antes, crear una V2 habría
+  dejado las dos versiones describiendo los mismos modelos. Los nombres de
+  las tablas no cambian: una colección guardada por la versión anterior se
+  sigue abriendo (comprobado con un almacén real del simulador).
+- Los tests unitarios ya no escriben en la `Documents` real de la app: usan
+  una carpeta temporal propia (`StorageLocation`).
+- Nombre de la app escrito a mano («Viñe») en la introducción, sustituido
+  por `AppInfo.displayName`.
+- Identificador de los huecos de Inicio basado en `hashValue`, que podía
+  repetirse entre series.
+- Los tests de arranque de la interfaz usaban la colección real del
+  simulador; ahora usan el almacén en memoria.
+
+Balance: 147 tests unitarios y 5 de interfaz, todos en verde, sin avisos de
+compilación.
+
+### En desarrollo — 5 de octubre de 2026
+
+**Añadido**
+
+- Botón «Abrir ejemplo» en la Biblioteca vacía: abre un cómic corto de
+  muestra (`Sample-Comic.cbz`, dibujos propios generados con
+  `scripts/make_review_comic.swift`) para probar el lector sin importar
+  nada. Va dentro del paquete de la app y se abre en solo lectura: no se
+  añade a la Biblioteca ni guarda progreso, así que no se repite lo del
+  antiguo cómic de bienvenida que aparecía sin haberlo importado. Pensado
+  sobre todo para el revisor de App Store en un dispositivo limpio.
+- Notas para la revisión (`docs/review/APP_REVIEW_NOTES.md`): texto para
+  App Store Connect, CBZ y PDF de prueba, y el script que los genera.
+
+**Cambiado**
+
+- «Copia de seguridad» pasa a llamarse «Exportar colección» en Perfil. El
+  texto aclara que genera un JSON con series y números, y que por ahora no
+  se puede volver a importar para restaurar la colección. Antes decía que
+  era «tu única copia», y eso hacía pensar que bastaba para recuperarla en
+  otro dispositivo. La restauración queda pendiente para la 1.1.
+- En la Biblioteca vacía, «Importar cómic» es ahora el botón destacado.
+
+Balance: 92 tests en verde, sin cambios en la suite.
 
 ### En desarrollo — 3 de octubre de 2026
 
@@ -469,9 +594,17 @@ versiones para quien retome ese trabajo en una versión futura.
 - [ ] Ampliar los UI Tests más allá del mínimo actual.
 - [x] Sin marcas registradas de terceros en el contenido visible de la app.
 - [ ] Notas para la revisión en App Store Connect con enlace a un CBZ y un
-  PDF de prueba libres de derechos: sin cómic de ejemplo incluido, el
-  revisor no tiene nada que abrir en un dispositivo limpio.
+  PDF de prueba libres de derechos, para que el revisor pueda probar la
+  importación (el lector ya se prueba con «Abrir ejemplo»). Archivos y texto
+  listos en [`docs/review/`](docs/review/APP_REVIEW_NOTES.md); falta subirlos
+  a la web y a App Store Connect.
 - [ ] Revisar que las capturas de App Store no muestren portadas con copyright.
+- [ ] Botón «Abrir en Libros» en el aviso de EPUB de texto, para pasar la
+  novela a Apple Books con un toque (el lector de libros llega en la 2.0).
+- [ ] Mencionar los EPUB de cómic en las notas para la revisión
+  ([`docs/review/`](docs/review/APP_REVIEW_NOTES.md) solo habla de CBZ, ZIP y PDF).
+- [ ] Probar en dispositivo con EPUB de cómic reales, sin DRM, de varias
+  procedencias (tienda, Calibre…).
 - [ ] Responder el cuestionario de clasificación por edad en App Store Connect.
 - [ ] Declarar no-trader en la Digital Services Act (sin compras integradas).
 - [ ] Confirmar que el Bundle Identifier (`com.kontroldesignstudio.vine`)

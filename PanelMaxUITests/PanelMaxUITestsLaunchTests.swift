@@ -20,6 +20,9 @@ final class PanelMaxUITestsLaunchTests: XCTestCase {
     @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
+        // Almacén en memoria: la captura no debe depender de lo que haya en la
+        // colección real del simulador, ni modificarla.
+        app.launchArguments = ["-uiTestsInMemoryStore"]
         app.launch()
 
         // Insert steps here to perform after app launch but before taking a screenshot,

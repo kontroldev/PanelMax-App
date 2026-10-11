@@ -41,42 +41,45 @@ enum CollectionFormat: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// Ficha que une un número con la estantería del usuario.
-@Model
-final class CollectionEntry {
+extension PanelMaxSchemaV1 {
 
-    /// Guardamos el `rawValue` en vez del enum: es más resistente a migraciones.
-    var stateRaw: String = CollectionState.owned.rawValue
-    var formatRaw: String = CollectionFormat.physical.rawValue
+    /// Ficha que une un número con la estantería del usuario.
+    @Model
+    final class CollectionEntry {
 
-    var dateAdded: Date = Date()
+        /// Guardamos el `rawValue` en vez del enum: es más resistente a migraciones.
+        var stateRaw: String = CollectionState.owned.rawValue
+        var formatRaw: String = CollectionFormat.physical.rawValue
 
-    /// Valoración de 0 a 5. Cero significa "sin valorar".
-    var rating: Int = 0
+        var dateAdded: Date = Date()
 
-    var notes: String = ""
+        /// Valoración de 0 a 5. Cero significa "sin valorar".
+        var rating: Int = 0
 
-    var issue: Issue?
+        var notes: String = ""
 
-    init(state: CollectionState = .owned,
-         format: CollectionFormat = .physical,
-         rating: Int = 0,
-         notes: String = "") {
-        self.stateRaw = state.rawValue
-        self.formatRaw = format.rawValue
-        self.rating = rating
-        self.notes = notes
-        self.dateAdded = Date()
-    }
+        var issue: Issue?
 
-    // Accesos cómodos al enum sin renunciar a guardar String.
-    var state: CollectionState {
-        get { CollectionState(rawValue: stateRaw) ?? .owned }
-        set { stateRaw = newValue.rawValue }
-    }
+        init(state: CollectionState = .owned,
+             format: CollectionFormat = .physical,
+             rating: Int = 0,
+             notes: String = "") {
+            self.stateRaw = state.rawValue
+            self.formatRaw = format.rawValue
+            self.rating = rating
+            self.notes = notes
+            self.dateAdded = Date()
+        }
 
-    var format: CollectionFormat {
-        get { CollectionFormat(rawValue: formatRaw) ?? .physical }
-        set { formatRaw = newValue.rawValue }
+        // Accesos cómodos al enum sin renunciar a guardar String.
+        var state: CollectionState {
+            get { CollectionState(rawValue: stateRaw) ?? .owned }
+            set { stateRaw = newValue.rawValue }
+        }
+
+        var format: CollectionFormat {
+            get { CollectionFormat(rawValue: formatRaw) ?? .physical }
+            set { formatRaw = newValue.rawValue }
+        }
     }
 }
